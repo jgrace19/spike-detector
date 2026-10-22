@@ -1,14 +1,15 @@
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
+import { isDeployReady } from "../lib/deploy.js";
 import { incidentContinuation, INCIDENT_ID_PATTERN, previewEnv } from "../lib/demo.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { closeLinearIssue } from "../lib/linear.js";
-import { isRecovered, latestSnapshot } from "../lib/metrics.js";
+import { checkValidationMetrics } from "../lib/metrics.js";
 import { commentIncident } from "../lib/notify.js";
 
 export default defineTool({
   description:
-    "After query_metrics shows the preview metric back at baseline, comment on Slack and Linear, close the Linear issue, and cancel the preview reminder. Refuses to close while the metric is still elevated.",
+    "After the preview is ready and both freshcart.checkout.gmv_cents and freshcart.checkout.average_order_value_cents are within 10% of baseline, comment on Slack and Linear, close the Linear issue, and cancel the reminder. Deploy ready means CI succeeded or the first preview-<pr> snapshot arrived.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),
@@ -28,22 +29,26 @@ export default defineTool({
       return { closed: true, already: true };
     }
     const env = previewEnv(prNumber);
-    const snapshot = await latestSnapshot(ctx.host.kv, env, incident.metric);
-    const baseline = snapshot?.baseline ?? incident.baseline;
-    if (snapshot === undefined || !isRecovered(snapshot.value, baseline)) {
+    const ready = await isDeployReady(ctx.host.kv, incident, prNumber);
+    if (!ready.ready) {
+      return { closed: false, reason: "deploy_not_ready", env };
+    }
+    const validation = await checkValidationMetrics(ctx.host.kv, env, incident);
+    if (!validation.recovered) {
       return {
         closed: false,
         reason: "not_recovered",
         env,
-        value: snapshot?.value,
-        baseline,
+        deployReady: ready.reason,
+        metrics: validation.metrics,
       };
     }
-    const text = [
-      `incident:${incidentId} recovered.`,
-      `metric ${incident.metric} in ${env}: value ${snapshot.value}, baseline ${baseline}.`,
-      note,
-    ].join("\n");
+    const lines = validation.metrics.map(
+      (metric) => `${metric.metric}: value ${metric.value}, baseline ${metric.baseline}`,
+    );
+    const text = [`incident:${incidentId} recovered on ${env} (${ready.reason}).`, ...lines, note].join(
+      "\n",
+    );
     const comments = await commentIncident(ctx.host, incident, text);
     let linear = "skipped";
     if (incident.linearIssueId !== undefined) {
@@ -55,7 +60,7 @@ export default defineTool({
     }
     if (ctx.host.reminders !== undefined) {
       if (incident.previewReminderId !== undefined) {
-        await ctx.host.reminders.cancel(incident.previewReminderId, "metric recovered");
+        await ctx.host.reminders.cancel(incident.previewReminderId, "metrics recovered");
       }
       if (incident.signoffReminderId !== undefined) {
         await ctx.host.reminders.cancel(incident.signoffReminderId, "incident closed");
@@ -70,6 +75,6 @@ export default defineTool({
       prNumber,
       note,
     });
-    return { closed: true, env, value: snapshot.value, baseline, comments, linear };
+    return { closed: true, env, deployReady: ready.reason, metrics: validation.metrics, comments, linear };
   },
 });

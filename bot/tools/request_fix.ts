@@ -1,7 +1,7 @@
 import { followUpCloudAgent } from "@cursor/bdk/extensions/cursor-cloud-agents";
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
-import { budgetsphereRepo, INCIDENT_ID_PATTERN } from "../lib/demo.js";
+import { INCIDENT_ID_PATTERN, marketplaceRepo } from "../lib/demo.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { fixPrompt } from "../lib/prompts.js";
 
@@ -45,7 +45,7 @@ export default defineTool({
         prompt: fixPrompt({
           incidentId,
           signoffNote: incident.signedOffNote,
-          baseBranch: incident.startingRef ?? budgetsphereRepo().startingRef,
+          baseBranch: incident.startingRef ?? marketplaceRepo().startingRef,
           plan,
         }),
       });

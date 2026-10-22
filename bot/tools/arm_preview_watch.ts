@@ -6,7 +6,7 @@ import { armPreviewWatch } from "../lib/watch.js";
 
 export default defineTool({
   description:
-    "Arm a reminder that polls preview-<pr> metrics until the alert metric returns to baseline. Idempotent per incident. Pass the pull request number from the cloud agent or the GitHub event, never an invented number.",
+    "Arm a reminder that waits until the pull request CI succeeds or the first preview-<pr> snapshot arrives, then polls until GMV and average order value are within 10% of baseline. Idempotent per incident. Pass the pull request number from the cloud agent or the GitHub event, never an invented number.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),

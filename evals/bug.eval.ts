@@ -1,21 +1,27 @@
 import { defineEval, includes } from "@cursor/bdk/evals";
 import { formatAlertPrompt } from "../bot/lib/prompts.js";
 
-const incidentId = "bug-latency-spike";
+const incidentId = "bug-checkout-undercharge";
 
 export default defineEval({
   tags: ["smoke", "bug"],
-  description: "An unexplained latency spike is recorded as a bug and paged.",
+  description: "A checkout revenue drop with flat order volume is recorded as a bug and paged.",
   async test(t) {
     await t.send(
-      formatAlertPrompt({
-        incidentId,
-        metric: "checkout_p95_ms",
-        env: "prod",
-        baseline: 200,
-        value: 1800,
-        window: "30m",
-      }),
+      [
+        formatAlertPrompt({
+          incidentId,
+          metric: "freshcart.checkout.gmv_cents",
+          env: "prod",
+          baseline: 100000,
+          value: 68000,
+          window: "30m",
+        }),
+        "Sibling snapshots in the same window:",
+        "freshcart.checkout.orders baseline 400 value 398",
+        "freshcart.checkout.units baseline 900 value 905",
+        "freshcart.checkout.average_order_value_cents baseline 250 value 170",
+      ].join("\n"),
     );
     t.succeeded();
     t.calledTool("list_recent_changes", { input: { incidentId } });

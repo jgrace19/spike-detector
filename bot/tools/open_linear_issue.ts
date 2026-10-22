@@ -1,12 +1,12 @@
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
-import { demo, INCIDENT_ID_PATTERN } from "../lib/demo.js";
+import { demo, INCIDENT_ID_PATTERN, linearProjectName } from "../lib/demo.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { openLinearIssue } from "../lib/linear.js";
 
 export default defineTool({
   description:
-    "Open a Linear issue in the fe-demo workspace, project Budgetsphere, for a bug incident. Idempotent per incidentId. Call after record_bug.",
+    "Open a Linear issue in the fe-demo workspace. The project name is LINEAR_PROJECT, or Marketplace when that is unset. Idempotent per incidentId. Call after record_bug.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),
@@ -36,7 +36,7 @@ export default defineTool({
     const description = [
       `incident:${incidentId}`,
       `Workspace: ${demo.linearWorkspace}`,
-      `Project: ${demo.linearProject}`,
+      `Project: ${linearProjectName()}`,
       `metric: ${incident.metric}`,
       `env: ${incident.env}`,
       `baseline: ${incident.baseline}`,
@@ -54,6 +54,12 @@ export default defineTool({
       linearIssueId: identifier,
       linearIssueUrl: opened.url,
     });
-    return { opened: true, identifier, url: opened.url, workspace: demo.linearWorkspace, project: demo.linearProject };
+    return {
+      opened: true,
+      identifier,
+      url: opened.url,
+      workspace: demo.linearWorkspace,
+      project: linearProjectName(),
+    };
   },
 });

@@ -1,4 +1,5 @@
 import type { HostContext, ReminderDefinition, ReminderInfo } from "@cursor/bdk";
+import { linkPullRequest } from "./deploy.js";
 import { incidentContinuation, previewEnv } from "./demo.js";
 import { getIncident, putIncident } from "./incidents.js";
 import previewWatch from "../reminders/preview_watch.js";
@@ -32,6 +33,7 @@ export async function armPreviewWatch(
     updatedAt: new Date().toISOString(),
   };
   await putIncident(host.kv, updated);
+  await linkPullRequest(host.kv, input.incidentId, input.prNumber);
   return arm(host, {
     incidentId: input.incidentId,
     purpose: `preview:${input.incidentId}`,

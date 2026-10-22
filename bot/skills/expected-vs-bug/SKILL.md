@@ -5,12 +5,14 @@ description: Use when an observability alert must be classified as an expected c
 # Expected versus bug
 
 Call `list_recent_changes` first. Classify only from that result and the
-alert's metric, env, baseline, value, and window.
+alert's metric, env, baseline, value, and window. Sibling metric lines in
+the same message count as evidence. Do not invent commits, and do not
+name a file, function, or patch.
 
 Search scope: the tool returns about 24 hours of commits and pull
-requests, and marks `inAlertWindow` for the alert's own window. A change
-outside the alert window can still explain a slow rollout. A change
-older than the tool's `since` is invisible. Do not invent commits.
+requests in `jgrace19/marketplace`, and marks `inAlertWindow` for the
+alert's own window. A change outside the alert window can still explain
+a slow rollout. A change older than the tool's `since` is invisible.
 
 ## Expected
 
@@ -37,9 +39,41 @@ Any of these is true:
 - A change names the metric but the wrong env, the opposite direction,
   or a target the value misses by more than 15%.
 - The tool result is empty.
+- The checkout revenue shape below matches, and no commit states a
+  revenue target the observation is within 15% of.
 
 Call `record_bug`. The note says which of those applied. Then launch
-triage, open the Linear issue, and page the code owner.
+triage, open the Linear issue, and page the code owner. The cloud agent
+investigates the symptom. Do not tell it a specific edit.
+
+## Checkout revenue shape
+
+Use this only to classify. It is not a fix.
+
+The checkout metrics are:
+
+- `freshcart.checkout.orders`
+- `freshcart.checkout.units`
+- `freshcart.checkout.gmv_cents`
+- `freshcart.checkout.average_order_value_cents`
+
+Treat it as a bug when `gmv_cents` and `average_order_value_cents` are
+about 32% below baseline (a drop from 28% to 36% counts) and, when
+`orders` and `units` are in the message, those two stay within 10% of
+baseline. The symptom is checkout undercharging lines whose quantity is
+greater than one. A commit that does not state a matching revenue
+target does not explain that drop.
+
+If the alert is only `gmv_cents` or only `average_order_value_cents`
+and the value is about 32% below baseline, with no commit stating that
+target, call `record_bug`.
+
+After a fix, recovery is separate from this rubric. Both
+`freshcart.checkout.gmv_cents` and
+`freshcart.checkout.average_order_value_cents` on env `preview-<pr>`
+must be within 10% of baseline. Orders and units staying flat is not
+the recovery check. Deploy ready means the pull request's CI succeeded
+or the first `preview-<pr>` snapshot arrived.
 
 ## Do not classify
 

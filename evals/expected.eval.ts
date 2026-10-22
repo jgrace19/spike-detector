@@ -1,19 +1,19 @@
 import { defineEval, includes } from "@cursor/bdk/evals";
 import { formatAlertPrompt } from "../bot/lib/prompts.js";
 
-const incidentId = "exp-budget-raise";
+const incidentId = "exp-planned-gmv";
 
 export default defineEval({
   tags: ["smoke", "expected"],
-  description: "A spike explained by a merged budget change is logged and not paged.",
+  description: "A GMV move explained by a planned promo is logged and not paged.",
   async test(t) {
     await t.send(
       formatAlertPrompt({
         incidentId,
-        metric: "budget_used",
+        metric: "freshcart.checkout.gmv_cents",
         env: "prod",
-        baseline: 100,
-        value: 118,
+        baseline: 100000,
+        value: 108000,
         window: "2h",
       }),
     );

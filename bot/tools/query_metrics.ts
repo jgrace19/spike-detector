@@ -6,7 +6,7 @@ import { isRecovered, latestSnapshot } from "../lib/metrics.js";
 
 export default defineTool({
   description:
-    "Read the latest metric snapshot stored by POST /metrics. For a fix pull request, pass env preview-<pr number>. recovered is true when the value is within 10% of baseline.",
+    "Read the latest metric snapshot stored by POST /metrics. For a fix pull request, pass env preview-<pr number>. recovered is true when the value is within 10% of baseline. Closing requires both freshcart.checkout.gmv_cents and freshcart.checkout.average_order_value_cents.",
   effect: "read",
   inputSchema: z.object({
     metric: z.string().min(1),

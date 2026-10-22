@@ -2,7 +2,7 @@
   "name": "spike-detector",
   "private": true,
   "type": "module",
-  "description": "Anomaly detection and triage bot for the Budgetsphere demo.",
+  "description": "Anomaly detection and triage bot for the marketplace demo.",
   "scripts": {
     "check": "tsc --noEmit",
     "validate": "bdk validate",
