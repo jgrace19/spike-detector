@@ -176,8 +176,12 @@ async function findProject(
   const match = projects.find(
     (project) => project.name.toLowerCase() === linearProjectName().toLowerCase(),
   );
-  if (match !== undefined) {
-    return match;
+  const override = process.env.LINEAR_TEAM?.trim();
+  if (match !== undefined && (match.team !== undefined || override)) {
+    return override ? { ...match, team: override } : match;
+  }
+  if (override) {
+    return { name: match?.name ?? linearProjectName(), team: override };
   }
   const teams = tools.find((tool) => LIST_TEAMS.test(tool.name));
   if (teams === undefined) {
@@ -188,7 +192,7 @@ async function findProject(
     return { name: linearProjectName() };
   }
   const team = firstTeam(tryParse(teamList.text) ?? teamList.text);
-  return { name: linearProjectName(), team };
+  return { name: match?.name ?? linearProjectName(), team };
 }
 
 async function call(
@@ -302,7 +306,11 @@ function collectProjects(value: unknown, found: ProjectHit[] = []): ProjectHit[]
     typeof value.name === "string" &&
     (typeof value.slug === "string" || url.includes("/project"))
   ) {
-    const team = typeof value.team === "string" ? value.team : teamName(value.team);
+    const teams = Array.isArray(value.teams) ? value.teams : [];
+    const team =
+      typeof value.team === "string"
+        ? value.team
+        : teamName(value.team) ?? (typeof teams[0] === "string" ? teams[0] : teamName(teams[0]));
     found.push(team === undefined ? { name: value.name } : { name: value.name, team });
   }
   for (const nested of Object.values(value)) {
