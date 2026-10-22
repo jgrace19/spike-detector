@@ -31,7 +31,7 @@ export function triagePrompt(input: {
   evidence?: string;
 }): string {
   const lines = [
-    "Investigate this Budgetsphere production anomaly. Do not edit files, commit, push, or open a pull request.",
+    "Investigate this marketplace anomaly on https://github.com/jgrace19/marketplace. Do not edit files, commit, push, or open a pull request.",
     `incident:${input.incidentId}`,
     `metric: ${input.metric}`,
     `env: ${input.env}`,

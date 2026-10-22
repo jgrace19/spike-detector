@@ -1,30 +1,30 @@
 {
-  "exp-budget-raise": {
+  "exp-planned-gmv": {
     "commits": [
       {
         "sha": "abc123def456",
-        "message": "Raise prod budget_used ceiling to 120 after the Q4 plan",
-        "url": "https://github.com/internalsphere/jg-budgetsphere/commit/abc123def456",
+        "message": "Expect freshcart.checkout.gmv_cents in prod to rise from 100000 to 110000 for the weekend promo",
+        "url": "https://github.com/jgrace19/marketplace/commit/abc123def456",
         "date": "2026-10-22T00:00:00Z"
       }
     ],
     "pulls": [
       {
         "number": 42,
-        "title": "Expect budget_used in prod to rise from 100 to 120",
-        "body": "Intentional change. metric=budget_used env=prod target=120. This is expected.",
-        "url": "https://github.com/internalsphere/jg-budgetsphere/pull/42",
+        "title": "Planned prod move for freshcart.checkout.gmv_cents",
+        "body": "Intentional change. metric=freshcart.checkout.gmv_cents env=prod target=110000. This is expected.",
+        "url": "https://github.com/jgrace19/marketplace/pull/42",
         "updatedAt": "2026-10-22T00:05:00Z",
         "merged": true
       }
     ]
   },
-  "bug-latency-spike": {
+  "bug-checkout-undercharge": {
     "commits": [
       {
         "sha": "fff999eee888",
         "message": "Update README badges",
-        "url": "https://github.com/internalsphere/jg-budgetsphere/commit/fff999eee888",
+        "url": "https://github.com/jgrace19/marketplace/commit/fff999eee888",
         "date": "2026-10-21T12:00:00Z"
       }
     ],

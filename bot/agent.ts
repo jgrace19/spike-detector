@@ -2,7 +2,7 @@ import { defineAgent } from "@cursor/bdk";
 
 export default defineAgent({
   name: "spike-detector",
-  description: "Classifies Budgetsphere metric anomalies and triages the ones that are bugs.",
+  description: "Classifies marketplace checkout anomalies and triages the ones that are bugs.",
   model: {
     id: "grok-4.5",
     params: [
@@ -17,7 +17,8 @@ export default defineAgent({
       "OBSERVABILITY_SHARED_SECRET",
       "SPIKE_DETECTOR_SLACK_CHANNEL",
       "SPIKE_DETECTOR_CODE_OWNER_SLACK_ID",
-      "BUDGETSPHERE_STARTING_REF",
+      "MARKETPLACE_STARTING_REF",
+      "LINEAR_PROJECT",
     ],
   },
 });

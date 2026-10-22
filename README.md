@@ -1,13 +1,13 @@
 # Spike detector
 
-BDK bot that triages Budgetsphere metric anomalies. A mock observability
+BDK bot that triages marketplace metric anomalies. A mock observability
 app (not in this repo) posts an alert. The bot decides whether the spike
 matches a recent change in
-[internalsphere/jg-budgetsphere](https://github.com/internalsphere/jg-budgetsphere).
+[jgrace19/marketplace](https://github.com/jgrace19/marketplace).
 Expected changes are logged and not paged. Bugs are investigated by a
 Cursor cloud agent, filed in Linear, and held for a Slack sign-off before
-the fix pull request. A GitHub wake plus a reminder watch the preview
-environment `preview-<pr number>` until the metric returns to baseline.
+the fix pull request. A GitHub wake plus a reminder watch `preview-<pr>`
+until GMV and average order value are back within 10% of baseline.
 
 Defaults chosen for this demo:
 
@@ -17,34 +17,42 @@ Defaults chosen for this demo:
 - Slack env prefix `SPIKE_DETECTOR`
 - Recovery band: 10% of `max(|baseline|, 1)`
 - Explanation band in the skill: 15% of a stated target
+- Linear workspace `fe-demo`. Project defaults to `Marketplace`, overridable with `LINEAR_PROJECT`
 - Linear connector name `Linear` (see the TODO in `bot/mcp-connections/account.ts`)
+- Deploy ready: GitHub CI success on the fix pull request, or the first `preview-<pr>` metric snapshot. No deployment-host URL
 
 ## Flow
 
 1. `POST /alert` on the `observability` channel. The same `incidentId` does
    not start a second session.
-2. `list_recent_changes` reads commits and pull requests with
-   `ctx.host.github.getOctokit()`.
+2. `list_recent_changes` reads commits and pull requests in
+   `jgrace19/marketplace` with `ctx.host.github.getOctokit()`.
 3. The `expected-vs-bug` skill picks expected or bug. Expected calls
-   `log_expected_change` and stops.
+   `log_expected_change` and stops. A checkout drop of about 32% in
+   `freshcart.checkout.gmv_cents` and
+   `freshcart.checkout.average_order_value_cents`, with orders and units
+   flat, is a bug. The skill does not name a code change.
 4. A bug calls `launch_triage`, which starts a cloud agent from
-   `demo/base` (or `BUDGETSPHERE_STARTING_REF`) and must not edit code
+   `demo/base` (or `MARKETPLACE_STARTING_REF`) and must not edit code
    yet. `autoCreatePR` is on so the later fix follow-up opens a pull
    request against that same branch.
 5. `page_code_owner` posts in the configured Slack channel. The incident
    record in host KV, keyed `incident:<id>`, is how the Slack thread
    resumes the incident.
-6. `open_linear_issue` files the ticket in workspace `fe-demo`, project
-   `Budgetsphere`.
+6. `open_linear_issue` files the ticket in workspace `fe-demo`. The
+   project is `LINEAR_PROJECT`, or `Marketplace` when that is unset.
 7. After an explicit Slack sign-off, `record_signoff` wakes the incident
    session and `request_fix` tells that same cloud agent to open the PR
    against `demo/base`, or against the starting ref stored at launch.
-8. GitHub pull request events that contain `incident:<id>`, and the
-   `preview_watch` reminder, poll `query_metrics` for env `preview-<pr>`.
-9. `close_incident` comments on Slack and Linear, closes the ticket, and
-   cancels the reminder.
+8. The preview is ready when GitHub CI on that pull request succeeds, or
+   when the first snapshot is stored for env `preview-<pr>`. The
+   `preview_watch` reminder then polls `query_metrics`.
+9. `close_incident` runs only when both GMV and average order value are
+   within 10% of baseline. It comments on Slack and Linear, closes the
+   ticket, and cancels the reminder.
 
-`POST /metrics` only stores snapshots in KV. It does not start a turn.
+`POST /metrics` stores snapshots in KV and records the first
+`preview-<pr>` arrival. It does not start a turn.
 
 ## Auth
 
@@ -89,12 +97,11 @@ before calling the channel locally. `bdk` loads `.env.local`.
 
 GitHub events use the signed-in Cursor account
 (`bdk login` or `CURSOR_API_KEY`). Connect GitHub for
-`internalsphere/jg-budgetsphere` in the Cursor dashboard. Local event
-pull:
+`jgrace19/marketplace` in the Cursor dashboard. Local event pull:
 
 ```bash
 npx bdk serve --dir . --mode single --cursor-events \
-  --repo internalsphere/jg-budgetsphere
+  --repo jgrace19/marketplace
 ```
 
 `--dev` does not fire schedules or reminders. Dispatch a reminder with
@@ -125,19 +132,20 @@ Until those are set, `page_code_owner` returns
 
 ### Linear
 
-Connect Linear on the Cursor account that hosts the bot. The issue goes
-to workspace `fe-demo`, project `Budgetsphere`. The connection is
-`optional` so the process still starts before that connector exists.
+Connect Linear on the Cursor account that hosts the bot. Issues go to
+workspace `fe-demo`. The project name defaults to `Marketplace`. Set
+`LINEAR_PROJECT` to use another project in that workspace. The connection
+is `optional` so the process still starts before that connector exists.
 
 ### Cloud agent ref
 
 `startingRef` defaults to `demo/base` in `bot/lib/demo.ts`. The cloud
-agent extension and `launch_triage` both read `budgetsphereRepo()`, so
-the agent starts on that branch. `request_fix` tells the follow-up to
-open the pull request against the ref stored at launch. A launch reads
-`BUDGETSPHERE_STARTING_REF` at call time when it is set. On Cursor
-hosting, set that name with `bdk secret set` so the value exists per
-request. An empty value keeps `demo/base`.
+agent extension and `launch_triage` both read `marketplaceRepo()`, so
+the agent starts on that branch of `jgrace19/marketplace`. `request_fix`
+tells the follow-up to open the pull request against the ref stored at
+launch. A launch reads `MARKETPLACE_STARTING_REF` at call time when it
+is set. On Cursor hosting, set that name with `bdk secret set` so the
+value exists per request. An empty value keeps `demo/base`.
 
 ## Deploy
 
@@ -149,8 +157,13 @@ npx bdk login
 npx bdk whoami
 npx bdk validate
 npx bdk deploy --dir . --slug spike-detector \
-  --cursor-events-repo internalsphere/jg-budgetsphere
+  --cursor-events-repo jgrace19/marketplace
 ```
+
+Redeploy the existing slug the same way. `--cursor-events-repo` replaces
+the watched repository list, so pass `jgrace19/marketplace` on every
+redeploy. A deploy that omits the flag watches this bot's source
+repository instead of the marketplace.
 
 Set secrets after the first deploy. `secret set` reads the value from
 stdin and does not echo it.
@@ -159,7 +172,8 @@ stdin and does not echo it.
 printf %s "$OBSERVABILITY_SHARED_SECRET" | npx bdk secret set spike-detector OBSERVABILITY_SHARED_SECRET
 printf %s "$SPIKE_DETECTOR_SLACK_CHANNEL" | npx bdk secret set spike-detector SPIKE_DETECTOR_SLACK_CHANNEL
 printf %s "$SPIKE_DETECTOR_CODE_OWNER_SLACK_ID" | npx bdk secret set spike-detector SPIKE_DETECTOR_CODE_OWNER_SLACK_ID
-printf %s "demo/base" | npx bdk secret set spike-detector BUDGETSPHERE_STARTING_REF
+printf %s "demo/base" | npx bdk secret set spike-detector MARKETPLACE_STARTING_REF
+printf %s "Marketplace" | npx bdk secret set spike-detector LINEAR_PROJECT
 npx bdk secret list spike-detector
 ```
 
@@ -179,7 +193,8 @@ Linear calls go through the host clients and the Cursor backend.
 | `SPIKE_DETECTOR_SLACK_APP_TOKEN` | Slack Socket Mode, from `slack create` |
 | `SPIKE_DETECTOR_SLACK_CHANNEL` | Paging the code owner |
 | `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | The `@` mention. Empty posts without a mention |
-| `BUDGETSPHERE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
+| `MARKETPLACE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
+| `LINEAR_PROJECT` | Optional. Empty uses project `Marketplace` in workspace `fe-demo` |
 
 The host also needs a Cursor credential (`bdk login`, `CURSOR_API_KEY`,
 or `CURSOR_SERVICE_ACCOUNT_KEY`) to run model turns and cloud agents.
@@ -196,12 +211,12 @@ curl -sS -D - -X POST http://127.0.0.1:3000/v1/channels/observability/alert \
   -H "X-Observability-Token: $OBSERVABILITY_SHARED_SECRET" \
   -H "X-BDK-Session-Key: incident:inc-1001" \
   -H 'content-type: application/json' \
-  -d '{"incidentId":"inc-1001","metric":"budget_used","env":"prod","baseline":100,"value":180,"window":"30m"}'
+  -d '{"incidentId":"inc-1001","metric":"freshcart.checkout.gmv_cents","env":"prod","baseline":100000,"value":68000,"window":"30m"}'
 
 curl -sS -D - -X POST http://127.0.0.1:3000/v1/channels/observability/metrics \
   -H "X-Observability-Token: $OBSERVABILITY_SHARED_SECRET" \
   -H 'content-type: application/json' \
-  -d '{"metric":"budget_used","env":"preview-42","value":102,"baseline":100,"window":"5m"}'
+  -d '{"metric":"freshcart.checkout.gmv_cents","env":"preview-42","value":100000,"baseline":100000,"window":"5m"}'
 ```
 
 A second alert with the same `incidentId` returns `202` and does not
@@ -215,7 +230,7 @@ curl -sS -D - -X POST "$AGENT_ALIAS_URL/v1/channels/observability/alert" \
   -H "X-Observability-Token: $OBSERVABILITY_SHARED_SECRET" \
   -H "X-BDK-Session-Key: incident:inc-1001" \
   -H 'content-type: application/json' \
-  -d '{"incidentId":"inc-1001","metric":"budget_used","env":"prod","baseline":100,"value":180,"window":"30m"}'
+  -d '{"incidentId":"inc-1001","metric":"freshcart.checkout.gmv_cents","env":"prod","baseline":100000,"value":68000,"window":"30m"}'
 ```
 
 Multi-agent serve mounts the same routes under `/<directory-name>/v1/...`.
@@ -224,7 +239,7 @@ Direct tool check, no model turn:
 
 ```bash
 npx bdk tool call query_metrics --dir . \
-  --input '{"metric":"budget_used","env":"preview-42"}'
+  --input '{"metric":"freshcart.checkout.gmv_cents","env":"preview-42"}'
 ```
 
 ## Evals
@@ -238,10 +253,13 @@ Model turns need a Cursor credential. Eval sessions do not post to Slack,
 open Linear issues, or launch cloud agents. `list_recent_changes` reads
 `fixtures/changes.json` when `purpose` is `eval`.
 
-- `expected` — `exp-budget-raise`, metric `budget_used` at 118 versus a
-  merged change whose target is 120. Logs the note and does not page.
-- `bug` — `bug-latency-spike`, metric `checkout_p95_ms` at 1800 with only
-  a README commit. Records a bug and calls the page tools.
+- `expected` — `exp-planned-gmv`. `freshcart.checkout.gmv_cents` at
+  108000 versus a merged promo whose target is 110000. Logs the note
+  and does not page.
+- `bug` — `bug-checkout-undercharge`. GMV and average order value are
+  about 32% below baseline while orders and units stay flat, and the
+  only commit is a README change. Records a bug and calls the page
+  tools. The case does not name a code fix.
 
 ## Layout
 
@@ -250,9 +268,9 @@ open Linear issues, or launch cloud agents. `list_recent_changes` reads
 | `bot/instructions.md` | Tool order and reply shape |
 | `bot/skills/expected-vs-bug/SKILL.md` | Expected versus bug rubric |
 | `bot/channels/observability.ts` | `POST /alert`, `POST /metrics` |
-| `bot/channels/github.ts` | Preview pull request wakes |
+| `bot/channels/github.ts` | Pull request and CI wakes for `jgrace19/marketplace` |
 | `bot/channels/slack.ts` | Sign-off thread |
-| `bot/extensions/cloud/` | Cloud agents on Budgetsphere. Launch and reply are disabled |
+| `bot/extensions/cloud/` | Cloud agents on marketplace. Launch and reply are disabled |
 | `bot/mcp-connections/account.ts` | Cursor account Linear |
 | `bot/tools/` | One tool per file |
 | `bot/reminders/` | Sign-off backup wake and preview poll |

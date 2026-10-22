@@ -38,6 +38,8 @@ export type IncidentRecord = {
   prNumber?: number;
   prUrl?: string;
   previewReminderId?: string;
+  /** Set when a GitHub check suite or check run for the fix PR succeeds. */
+  ciSucceededAt?: string;
 };
 
 export function incidentKey(incidentId: string): string {

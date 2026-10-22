@@ -40,7 +40,7 @@ export function pageText(incident: IncidentRecord, summary: string): string {
   const owner = codeOwnerSlackId();
   const mention = owner === "" ? "" : `<@${owner}> `;
   const lines = [
-    `${mention}Budgetsphere anomaly incident:${incident.incidentId}`,
+    `${mention}Marketplace anomaly incident:${incident.incidentId}`,
     `metric ${incident.metric} in ${incident.env}: value ${incident.value} vs baseline ${incident.baseline} (window ${incident.window}).`,
   ];
   if (incident.cloudAgentUrl !== undefined) {

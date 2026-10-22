@@ -1,6 +1,7 @@
 import { defineChannel, POST, sharedSecretAuth } from "@cursor/bdk/channels";
 import { z } from "zod";
-import { demo, INCIDENT_ID_PATTERN, incidentContinuation } from "../lib/demo.js";
+import { notePreviewSignal } from "../lib/deploy.js";
+import { demo, INCIDENT_ID_PATTERN, incidentContinuation, prNumberFromPreviewEnv } from "../lib/demo.js";
 import { getIncident, principalFromAuth, putIncident } from "../lib/incidents.js";
 import { appendSnapshot } from "../lib/metrics.js";
 import { formatAlertPrompt } from "../lib/prompts.js";
@@ -82,6 +83,9 @@ export default defineChannel({
           ...(body.window === undefined ? {} : { window: body.window }),
           ...(body.incidentId === undefined ? {} : { incidentId: body.incidentId }),
         });
+        if (prNumberFromPreviewEnv(body.env) !== undefined) {
+          await notePreviewSignal(route.host.kv, body.env, body.metric);
+        }
         return new Response(null, { status: 202 });
       },
     }),

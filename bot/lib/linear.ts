@@ -1,5 +1,5 @@
 import type { HostMcpCallResult, HostMcpRegistry, HostMcpToolInfo } from "@cursor/bdk";
-import { demo } from "./demo.js";
+import { demo, linearProjectName } from "./demo.js";
 import { isRecord } from "./json.js";
 
 const CONNECTION = "account";
@@ -38,7 +38,7 @@ export async function openLinearIssue(
   const args: Record<string, unknown> = {};
   assign(args, create, ["title", "name"], input.title);
   assign(args, create, ["description", "body"], input.description);
-  assign(args, create, ["project", "projectId", "project_id"], project?.name ?? demo.linearProject);
+  assign(args, create, ["project", "projectId", "project_id"], project?.name ?? linearProjectName());
   if (project?.team !== undefined) {
     assign(args, create, ["team", "teamId", "team_id"], project.team);
   }
@@ -174,21 +174,21 @@ async function findProject(
   }
   const projects = collectProjects(tryParse(listed.text) ?? listed.text);
   const match = projects.find(
-    (project) => project.name.toLowerCase() === demo.linearProject.toLowerCase(),
+    (project) => project.name.toLowerCase() === linearProjectName().toLowerCase(),
   );
   if (match !== undefined) {
     return match;
   }
   const teams = tools.find((tool) => LIST_TEAMS.test(tool.name));
   if (teams === undefined) {
-    return { name: demo.linearProject };
+    return { name: linearProjectName() };
   }
   const teamList = await call(mcp, teams.name, {});
   if (teamList.status === "error") {
-    return { name: demo.linearProject };
+    return { name: linearProjectName() };
   }
   const team = firstTeam(tryParse(teamList.text) ?? teamList.text);
-  return { name: demo.linearProject, team };
+  return { name: linearProjectName(), team };
 }
 
 async function call(

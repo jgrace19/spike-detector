@@ -1,5 +1,5 @@
 import type { HostKvApi } from "@cursor/bdk";
-import { demo } from "./demo.js";
+import { demo, validationMetrics } from "./demo.js";
 import { isRecord, toJson } from "./json.js";
 
 export type MetricSnapshot = {
@@ -53,6 +53,38 @@ export async function latestSnapshot(
   }
   const snapshots = current.filter(isSnapshot);
   return snapshots[snapshots.length - 1];
+}
+
+export type MetricCheck = {
+  metric: string;
+  found: boolean;
+  value?: number;
+  baseline?: number;
+  recovered: boolean;
+};
+
+/** GMV and average order value on a preview env, each within 10% of baseline. */
+export async function checkValidationMetrics(
+  kv: HostKvApi,
+  env: string,
+  incident: { metric: string; baseline: number },
+): Promise<{ recovered: boolean; metrics: MetricCheck[] }> {
+  const metrics: MetricCheck[] = [];
+  for (const metric of validationMetrics) {
+    const snapshot = await latestSnapshot(kv, env, metric);
+    const baseline =
+      snapshot?.baseline ?? (incident.metric === metric ? incident.baseline : undefined);
+    const recovered =
+      snapshot !== undefined && baseline !== undefined && isRecovered(snapshot.value, baseline);
+    metrics.push({
+      metric,
+      found: snapshot !== undefined,
+      ...(snapshot === undefined ? {} : { value: snapshot.value }),
+      ...(baseline === undefined ? {} : { baseline }),
+      recovered,
+    });
+  }
+  return { recovered: metrics.every((metric) => metric.recovered), metrics };
 }
 
 function isSnapshot(value: unknown): value is MetricSnapshot {
