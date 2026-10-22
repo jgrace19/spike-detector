@@ -62,6 +62,7 @@ export default defineTool({
     await updateIncident(ctx.host.kv, incidentId, {
       cloudAgentId: launched.agentId,
       cloudAgentUrl: launched.url,
+      startingRef: repo.startingRef,
     });
     return {
       launched: true,

@@ -1,14 +1,15 @@
 /**
- * Demo targets. Change `startingRef` here, or set BUDGETSPHERE_STARTING_REF
- * in the environment before a launch. On Cursor hosting, non-secret env vars
- * are not documented as injected; the named secret is read inside
+ * Demo targets. The cloud agent starts from `demo/base`, and fix pull
+ * requests target that same ref. Change `defaultStartingRef` here, or set
+ * BUDGETSPHERE_STARTING_REF before a launch. On Cursor hosting, non-secret
+ * env vars are not documented as injected; the named secret is read inside
  * {@link budgetsphereRepo} at launch time, not when this module loads.
  */
 export const demo = {
   owner: "internalsphere",
   repo: "jg-budgetsphere",
   repoUrl: "https://github.com/internalsphere/jg-budgetsphere",
-  defaultStartingRef: "main",
+  defaultStartingRef: "demo/base",
   linearWorkspace: "fe-demo",
   linearProject: "Budgetsphere",
   observabilitySecret: "OBSERVABILITY_SHARED_SECRET",

@@ -24,6 +24,8 @@ export type IncidentRecord = {
   principal?: StoredPrincipal;
   cloudAgentId?: string;
   cloudAgentUrl?: string;
+  /** Branch the cloud agent started from. Fix PRs target this ref. */
+  startingRef?: string;
   linearIssueId?: string;
   linearIssueUrl?: string;
   slackChannelId?: string;

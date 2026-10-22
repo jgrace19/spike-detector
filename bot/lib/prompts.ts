@@ -57,10 +57,12 @@ export function triagePrompt(input: {
 export function fixPrompt(input: {
   incidentId: string;
   signoffNote: string;
+  baseBranch: string;
   plan?: string;
 }): string {
   const lines = [
     "The code owner signed off. Implement the approved fix and open a pull request.",
+    `The pull request base branch is ${input.baseBranch}.`,
     `Put this exact token in the pull request body: incident:${input.incidentId}`,
     "Do not merge the pull request.",
     `Sign-off note: ${input.signoffNote}`,

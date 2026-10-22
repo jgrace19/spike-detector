@@ -13,7 +13,7 @@ Defaults chosen for this demo:
 
 - Model `grok-4.5` with `effort=high` and `fast=true`
 - Package name and deploy slug `spike-detector`
-- Cloud agent `startingRef` `main`, overridable at launch time
+- Cloud agent `startingRef` `demo/base`, overridable at launch time. Fix pull requests target that ref.
 - Slack env prefix `SPIKE_DETECTOR`
 - Recovery band: 10% of `max(|baseline|, 1)`
 - Explanation band in the skill: 15% of a stated target
@@ -27,16 +27,18 @@ Defaults chosen for this demo:
    `ctx.host.github.getOctokit()`.
 3. The `expected-vs-bug` skill picks expected or bug. Expected calls
    `log_expected_change` and stops.
-4. A bug calls `launch_triage`, which starts a cloud agent that must not
-   edit code yet. `autoCreatePR` is on so the later fix follow-up opens a
-   pull request.
+4. A bug calls `launch_triage`, which starts a cloud agent from
+   `demo/base` (or `BUDGETSPHERE_STARTING_REF`) and must not edit code
+   yet. `autoCreatePR` is on so the later fix follow-up opens a pull
+   request against that same branch.
 5. `page_code_owner` posts in the configured Slack channel. The incident
    record in host KV, keyed `incident:<id>`, is how the Slack thread
    resumes the incident.
 6. `open_linear_issue` files the ticket in workspace `fe-demo`, project
    `Budgetsphere`.
 7. After an explicit Slack sign-off, `record_signoff` wakes the incident
-   session and `request_fix` tells that same cloud agent to open the PR.
+   session and `request_fix` tells that same cloud agent to open the PR
+   against `demo/base`, or against the starting ref stored at launch.
 8. GitHub pull request events that contain `incident:<id>`, and the
    `preview_watch` reminder, poll `query_metrics` for env `preview-<pr>`.
 9. `close_incident` comments on Slack and Linear, closes the ticket, and
@@ -129,10 +131,13 @@ to workspace `fe-demo`, project `Budgetsphere`. The connection is
 
 ### Cloud agent ref
 
-`startingRef` defaults to `main` in `bot/lib/demo.ts`. A launch reads
+`startingRef` defaults to `demo/base` in `bot/lib/demo.ts`. The cloud
+agent extension and `launch_triage` both read `budgetsphereRepo()`, so
+the agent starts on that branch. `request_fix` tells the follow-up to
+open the pull request against the ref stored at launch. A launch reads
 `BUDGETSPHERE_STARTING_REF` at call time when it is set. On Cursor
 hosting, set that name with `bdk secret set` so the value exists per
-request. An empty value keeps `main`.
+request. An empty value keeps `demo/base`.
 
 ## Deploy
 
@@ -154,7 +159,7 @@ stdin and does not echo it.
 printf %s "$OBSERVABILITY_SHARED_SECRET" | npx bdk secret set spike-detector OBSERVABILITY_SHARED_SECRET
 printf %s "$SPIKE_DETECTOR_SLACK_CHANNEL" | npx bdk secret set spike-detector SPIKE_DETECTOR_SLACK_CHANNEL
 printf %s "$SPIKE_DETECTOR_CODE_OWNER_SLACK_ID" | npx bdk secret set spike-detector SPIKE_DETECTOR_CODE_OWNER_SLACK_ID
-printf %s "main" | npx bdk secret set spike-detector BUDGETSPHERE_STARTING_REF
+printf %s "demo/base" | npx bdk secret set spike-detector BUDGETSPHERE_STARTING_REF
 npx bdk secret list spike-detector
 ```
 
@@ -174,7 +179,7 @@ Linear calls go through the host clients and the Cursor backend.
 | `SPIKE_DETECTOR_SLACK_APP_TOKEN` | Slack Socket Mode, from `slack create` |
 | `SPIKE_DETECTOR_SLACK_CHANNEL` | Paging the code owner |
 | `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | The `@` mention. Empty posts without a mention |
-| `BUDGETSPHERE_STARTING_REF` | Optional. Empty uses `main` |
+| `BUDGETSPHERE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
 
 The host also needs a Cursor credential (`bdk login`, `CURSOR_API_KEY`,
 or `CURSOR_SERVICE_ACCOUNT_KEY`) to run model turns and cloud agents.

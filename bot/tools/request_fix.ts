@@ -1,13 +1,13 @@
 import { followUpCloudAgent } from "@cursor/bdk/extensions/cursor-cloud-agents";
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
-import { INCIDENT_ID_PATTERN } from "../lib/demo.js";
+import { budgetsphereRepo, INCIDENT_ID_PATTERN } from "../lib/demo.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { fixPrompt } from "../lib/prompts.js";
 
 export default defineTool({
   description:
-    "After a recorded Slack sign-off, tell the existing cloud agent to implement the fix and open a PR. Does not launch a second agent. Call from the incident session, not from Slack.",
+    "After a recorded Slack sign-off, tell the existing cloud agent to implement the fix and open a PR against the launch starting ref (demo/base unless overridden). Does not launch a second agent. Call from the incident session, not from Slack.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),
@@ -45,6 +45,7 @@ export default defineTool({
         prompt: fixPrompt({
           incidentId,
           signoffNote: incident.signedOffNote,
+          baseBranch: incident.startingRef ?? budgetsphereRepo().startingRef,
           plan,
         }),
       });
