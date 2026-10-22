@@ -1,0 +1,7 @@
+node_modules/
+.agent-serve/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.bdk/
