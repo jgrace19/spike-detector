@@ -6,7 +6,7 @@ import { openLinearIssue } from "../lib/linear.js";
 
 export default defineTool({
   description:
-    "Open a Linear issue in the fe-demo workspace. The project name is LINEAR_PROJECT, or Marketplace when that is unset. Idempotent per incidentId. Call after record_bug.",
+    "Open a Linear issue in the fe-demo workspace. The project name is LINEAR_PROJECT, or FreshCart when that is unset. Idempotent per incidentId. Call after record_bug.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),

@@ -20,6 +20,7 @@ export default defineAgent({
       "SPIKE_DETECTOR_CODE_OWNER_SLACK_ID",
       "MARKETPLACE_STARTING_REF",
       "LINEAR_PROJECT",
+      "LINEAR_TEAM",
       "LINEAR_TOKEN",
     ],
   },
