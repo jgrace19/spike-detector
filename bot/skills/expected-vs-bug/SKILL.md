@@ -60,9 +60,9 @@ The checkout metrics are:
 Treat it as a bug when `gmv_cents` and `average_order_value_cents` are
 about 32% below baseline (a drop from 28% to 36% counts) and, when
 `orders` and `units` are in the message, those two stay within 10% of
-baseline. The symptom is checkout undercharging lines whose quantity is
-greater than one. A commit that does not state a matching revenue
-target does not explain that drop.
+baseline. A commit that does not state a matching revenue target does not explain that
+drop. A recent commit touching checkout or pricing is a suspect worth naming
+as evidence (SHA and message), but do not diagnose the code yourself.
 
 If the alert is only `gmv_cents` or only `average_order_value_cents`
 and the value is about 32% below baseline, with no commit stating that

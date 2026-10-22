@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { HostGitHubClient } from "@cursor/bdk";
-import { demo } from "./demo.js";
+import { demo, marketplaceRepo } from "./demo.js";
 import { isRecord } from "./json.js";
 import { searchBounds } from "./window.js";
 
@@ -26,6 +26,8 @@ export type ChangeList = {
   ok: true;
   source: "github" | "eval-fixture";
   repo: string;
+  /** Branch that production serves. Every commit here is deployed to env prod. */
+  productionRef: string;
   since: string;
   alertSince: string;
   commits: ChangeCommit[];
@@ -46,16 +48,19 @@ export async function listChanges(input: {
   }
   try {
     const octokit = await input.github.getOctokit();
+    const productionRef = marketplaceRepo().startingRef;
     const [commitResponse, pullResponse] = await Promise.all([
       octokit.rest.repos.listCommits({
         owner: demo.owner,
         repo: demo.repo,
+        sha: productionRef,
         since: bounds.since,
         per_page: 15,
       }),
       octokit.rest.pulls.list({
         owner: demo.owner,
         repo: demo.repo,
+        base: productionRef,
         state: "all",
         sort: "updated",
         direction: "desc",
@@ -95,6 +100,7 @@ export async function listChanges(input: {
       ok: true,
       source: "github",
       repo: `${demo.owner}/${demo.repo}`,
+      productionRef,
       since: bounds.since,
       alertSince: bounds.alertSince,
       commits,
@@ -118,6 +124,7 @@ async function fixtureChanges(
     ok: true,
     source: "eval-fixture",
     repo: `${demo.owner}/${demo.repo}`,
+    productionRef: marketplaceRepo().startingRef,
     since: bounds.since,
     alertSince: bounds.alertSince,
     commits: commits.filter(isCommit).map((commit) => ({ ...commit, inAlertWindow: true })),
