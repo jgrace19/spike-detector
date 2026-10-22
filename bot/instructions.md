@@ -108,6 +108,11 @@ of baseline, the handler marks the Linear issue done and posts the
 resolution. If `load_incident` shows `closed`, do not close it again
 and do not post.
 
+If that handler cannot finish (for example the Linear call fails), it
+sends a message asking you to call `finish_production_close` for the
+incident. Call it once and report the result in one line. Do not call
+`close_incident` for a production recovery.
+
 ## Preview
 
 Deploy ready means the pull request's CI checks succeeded, or the first

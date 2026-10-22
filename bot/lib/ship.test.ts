@@ -5,6 +5,8 @@ import { announceKnownPullRequest } from "./cloud-stop.js";
 import { putIncident, updateIncident, type IncidentRecord } from "./incidents.js";
 import {
   handleProductionRecovery,
+  needsTurnFallback,
+  getRecoveryRecord,
   isProductionEnv,
   observabilityAlertDecision,
   observabilityAlertSchema,
@@ -568,4 +570,47 @@ test("a recorded ship pushes the deploy hook and a failure stays in the thread",
       process.env.OBSERVABILITY_SHARED_SECRET = previousToken;
     }
   }
+});
+
+test("a Linear failure still posts Slack once, records the outcome, and asks for a turn", async () => {
+  const kv = memoryKv();
+  await putIncident(kv, incident({ shipReviewSlackTs: "100.3", shippedAt: "2026-10-22T01:00:00.000Z" }));
+  const { host, posts } = fakeHost(kv);
+  await putShipped(kv, {
+    incidentId: "inc-1001",
+    prNumber: 42,
+    prUrl: PR_URL,
+    threadTs: "100.1",
+    channelId: "C1",
+    linearIssueId: "FC-1",
+    shippedAt: "2026-10-22T01:00:00.000Z",
+  });
+  const failing = async () => ({ ok: false as const, reason: "not_connected" as const, message: "Linear connection is not loaded" });
+  const first = await handleProductionRecovery(host, recoveryBody(), { closeIssue: failing });
+  assert.equal(first.closed, false);
+  assert.equal(first.reason, "linear_close_failed");
+  assert.equal(first.slack, "posted");
+  assert.equal(needsTurnFallback(first), true);
+  assert.equal(posts.length, 1);
+  const record = await getRecoveryRecord(kv, "inc-1001");
+  assert.equal(record?.reason, "linear_close_failed");
+  assert.equal(record?.message, "Linear connection is not loaded");
+  assert.equal(record?.body.incidentId, "inc-1001");
+
+  const comments: string[] = [];
+  const second = await handleProductionRecovery(host, record!.body, {
+    closeIssue: async (_mcp, input) => ({ ok: true as const, identifier: input.identifier }),
+    commentIssue: async (_mcp, input) => {
+      comments.push(input.body);
+      return { ok: true as const, identifier: input.identifier };
+    },
+    via: "turn",
+  });
+  assert.equal(second.closed, true);
+  assert.equal(second.slack, "already");
+  assert.equal(posts.length, 1);
+  assert.equal(comments.length, 1);
+  assert.doesNotMatch(comments[0] ?? "", /datacat|demo\/base/i);
+  assert.equal((await getRecoveryRecord(kv, "inc-1001"))?.via, "turn");
+  assert.equal(needsTurnFallback(await handleProductionRecovery(host, recoveryBody())), false);
 });
