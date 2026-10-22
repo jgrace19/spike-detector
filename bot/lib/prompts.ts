@@ -1,3 +1,6 @@
+export const FRESH_FIX_RULE =
+  "Ignore open or unmerged pull requests. Never cite, reuse or recommend merging an existing fix PR; always implement the fix from scratch on a new branch.";
+
 export type AlertPromptInput = {
   incidentId: string;
   metric: string;
@@ -32,6 +35,7 @@ export function triagePrompt(input: {
 }): string {
   const lines = [
     "Investigate this marketplace anomaly on https://github.com/jgrace19/marketplace. Do not edit files, commit, push, or open a pull request.",
+    FRESH_FIX_RULE,
     `incident:${input.incidentId}`,
     `metric: ${input.metric}`,
     `env: ${input.env}`,
@@ -76,6 +80,7 @@ export function fixPrompt(input: {
 }): string {
   const lines = [
     "The code owner signed off. Implement the approved fix and open a pull request.",
+    FRESH_FIX_RULE,
     `The pull request base branch is ${input.baseBranch}.`,
     `Put this exact token in the pull request body: incident:${input.incidentId}`,
     "Do not merge the pull request. Do not add a ship label.",

@@ -30,9 +30,10 @@ type ReactionMessage = {
 };
 
 /**
- * A rocket on the ship-review message labels the pull request and comments.
- * It does not merge. Rockets on the alert, the triage card, or the pull
- * request link do nothing. A second rocket does not comment or post again.
+ * A rocket on the ship-review message records the ship and posts the shipping
+ * line. The GitHub label and comment are best effort and do not gate the
+ * record. It does not merge. Rockets on the alert, the triage card, or the
+ * pull request link do nothing. A second rocket does not comment or post again.
  */
 export async function handleShipReaction(
   host: HostContext,
@@ -75,17 +76,60 @@ async function approveLocked(input: {
   }
   const threadTs = incident.slackThreadTs;
   const prNumber = incident.prNumber;
-  if (incident.shippedAt !== undefined && (await getShipped(input.host.kv, incident.incidentId)) !== undefined) {
+  const existing = await getShipped(input.host.kv, incident.incidentId);
+  if (
+    incident.shippedAt !== undefined &&
+    existing !== undefined &&
+    incident.shippingPostedAt !== undefined
+  ) {
     return { status: "already", prNumber };
   }
+
+  let octokit: HostOctokit | undefined;
   try {
-    const octokit = await input.host.github.getOctokit();
-    await ensureShipLabel(octokit, prNumber);
-    await commentOnce(octokit, prNumber, shipApprovalComment(input.approver));
+    octokit = await input.host.github.getOctokit();
   } catch (error) {
-    return { status: "failed", reason: error instanceof Error ? error.message : String(error) };
+    console.warn(`[spike-detector] github client unavailable: ${errorText(error)}`);
   }
-  let current = incident;
+
+  let branch = existing?.branch ?? incident.headBranch;
+  let headSha = existing?.headSha ?? incident.headSha;
+  if (octokit !== undefined) {
+    try {
+      const head = await readPullHead(octokit, prNumber);
+      if (head.branch !== undefined) {
+        branch = head.branch;
+      }
+      if (head.headSha !== undefined) {
+        headSha = head.headSha;
+      }
+    } catch (error) {
+      console.warn(`[spike-detector] pull request head read failed: ${errorText(error)}`);
+    }
+  }
+
+  const shippedAt = incident.shippedAt ?? existing?.shippedAt ?? new Date().toISOString();
+  await putShipped(input.host.kv, {
+    incidentId: incident.incidentId,
+    prNumber,
+    threadTs,
+    shippedAt,
+    ...(incident.prUrl === undefined ? {} : { prUrl: incident.prUrl }),
+    ...(incident.slackChannelId === undefined ? {} : { channelId: incident.slackChannelId }),
+    ...(incident.linearIssueId === undefined ? {} : { linearIssueId: incident.linearIssueId }),
+    ...(incident.linearIssueUrl === undefined ? {} : { linearIssueUrl: incident.linearIssueUrl }),
+    ...(incident.shipReviewSlackTs === undefined ? {} : { reviewTs: incident.shipReviewSlackTs }),
+    ...(branch === undefined || branch === "" ? {} : { branch }),
+    ...(headSha === undefined || headSha === "" ? {} : { headSha }),
+    approver: input.approver,
+  });
+  const recorded = await updateIncident(input.host.kv, incident.incidentId, {
+    ...(incident.shippedAt === undefined ? { shippedAt } : {}),
+    ...(branch === undefined || branch === "" ? {} : { headBranch: branch }),
+    ...(headSha === undefined || headSha === "" ? {} : { headSha }),
+  });
+  let current = recorded ?? incident;
+
   if (current.shippingPostedAt === undefined) {
     const payload = shippingPayload();
     const posted = await postSlack({
@@ -105,21 +149,18 @@ async function approveLocked(input: {
       current = updated;
     }
   }
-  const shippedAt = current.shippedAt ?? new Date().toISOString();
-  await putShipped(input.host.kv, {
-    incidentId: current.incidentId,
-    prNumber,
-    threadTs,
-    shippedAt,
-    ...(current.prUrl === undefined ? {} : { prUrl: current.prUrl }),
-    ...(current.slackChannelId === undefined ? {} : { channelId: current.slackChannelId }),
-    ...(current.linearIssueId === undefined ? {} : { linearIssueId: current.linearIssueId }),
-    ...(current.linearIssueUrl === undefined ? {} : { linearIssueUrl: current.linearIssueUrl }),
-    ...(current.shipReviewSlackTs === undefined ? {} : { reviewTs: current.shipReviewSlackTs }),
-    approver: input.approver,
-  });
-  if (current.shippedAt === undefined) {
-    await updateIncident(input.host.kv, current.incidentId, { shippedAt });
+
+  if (octokit !== undefined) {
+    try {
+      await ensureShipLabel(octokit, prNumber);
+    } catch (error) {
+      console.warn(`[spike-detector] ship label failed: ${errorText(error)}`);
+    }
+    try {
+      await commentOnce(octokit, prNumber, shipApprovalComment(input.approver));
+    } catch (error) {
+      console.warn(`[spike-detector] ship comment failed: ${errorText(error)}`);
+    }
   }
   return { status: "shipped", prNumber };
 }
@@ -164,6 +205,27 @@ export async function postShipReview(
 }
 
 type HostOctokit = Awaited<ReturnType<HostContext["github"]["getOctokit"]>>;
+
+async function readPullHead(
+  octokit: HostOctokit,
+  prNumber: number,
+): Promise<{ branch?: string; headSha?: string }> {
+  const response = await octokit.rest.pulls.get({
+    owner: demo.owner,
+    repo: demo.repo,
+    pull_number: prNumber,
+  });
+  const ref = response.data.head.ref;
+  const sha = response.data.head.sha;
+  return {
+    ...(ref === "" ? {} : { branch: ref }),
+    ...(sha === "" ? {} : { headSha: sha }),
+  };
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function shipApprovalComment(approver: string): string {
   const name = approver.replace(/\s+/g, " ").trim().slice(0, 80);

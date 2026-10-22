@@ -1,10 +1,12 @@
-import { defineChannel, POST, sharedSecretAuth } from "@cursor/bdk/channels";
+import { defineChannel, GET, POST, sharedSecretAuth } from "@cursor/bdk/channels";
 import { z } from "zod";
 import { notePreviewSignal } from "../lib/deploy.js";
 import { demo, INCIDENT_ID_PATTERN, incidentContinuation, prNumberFromPreviewEnv } from "../lib/demo.js";
 import { getIncident, principalFromAuth, putIncident } from "../lib/incidents.js";
 import { appendSnapshot } from "../lib/metrics.js";
 import { formatAlertPrompt } from "../lib/prompts.js";
+import { resetObservability } from "../lib/reset.js";
+import { listUnresolvedShipped } from "../lib/shipped.js";
 import {
   handleProductionRecovery,
   observabilityAlertDecision,
@@ -99,6 +101,22 @@ export default defineChannel({
           await notePreviewSignal(route.host.kv, body.env, body.metric);
         }
         return new Response(null, { status: 202 });
+      },
+    }),
+    GET("/shipped", {
+      description: "List shipped incidents that have not resolved yet.",
+      querySchema: z.object({}),
+      handler: async (_request, route) => {
+        const items = await listUnresolvedShipped(route.host.kv);
+        return Response.json({ items });
+      },
+    }),
+    POST("/reset", {
+      description: "Close every open incident and clear shipped records.",
+      bodySchema: z.object({}),
+      handler: async (_request, route) => {
+        const result = await resetObservability(route.host);
+        return Response.json(result);
       },
     }),
   ],

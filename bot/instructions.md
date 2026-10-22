@@ -23,6 +23,7 @@ The user message is an observability alert. `incident:<id>` is the id.
 
 1. Call `list_recent_changes` with that incident id and the alert window.
    If it returns `ok: false`, stop. Say the lookup failed. Do not classify.
+   Ignore open or unmerged pull requests. Never cite, reuse or recommend merging an existing fix PR; always implement the fix from scratch on a new branch.
 2. Apply the skill.
 3. Expected: call `log_expected_change` once. Do not call `record_bug`,
    `launch_triage`, `open_linear_issue`, `page_code_owner`, or `request_fix`.
@@ -49,11 +50,12 @@ handler. That handler does not start a model turn. Reactions on the
 alert are ignored. A question is not sign-off.
 
 A 🚀 reaction ships only when it is on the review message posted after
-the pull request link. The handler adds the GitHub label `ship`,
-comments on the pull request, and posts `🚀 Shipping to production…`.
-It does not merge. A rocket on the alert, the triage card, or the pull
-request link does nothing. Do not add the label or the shipping line
-yourself.
+the pull request link. The handler records the ship and posts
+`🚀 Shipping to production…`. It also tries to add the GitHub label
+`ship` and a pull request comment. Those GitHub writes can fail without
+undoing the ship. It does not merge. A rocket on the alert, the triage
+card, or the pull request link does nothing. Do not add the label or
+the shipping line yourself.
 
 If a Slack turn is running anyway, call `load_incident`. When
 `signedOffAt` is already set, do not call `record_signoff`, do not post
@@ -89,12 +91,14 @@ When the incident session hears that the owner signed off, call
 `request_fix`. The plan is already on the incident. Do not launch a
 second agent. Do not post "fix in progress"; that line is already in
 the thread. If `request_fix` returns already, stop without posting.
+Ignore open or unmerged pull requests. Never cite, reuse or recommend merging an existing fix PR; always implement the fix from scratch on a new branch.
 
 ## Production ship
 
 The review card is the only message that accepts 🚀. After that
 reaction the incident has `shippedAt` set and KV key `shipped:<id>`
-holds the pull request number, Slack thread ts, and Linear issue id.
+holds the pull request number, head branch, head sha, Slack thread ts,
+and Linear issue id.
 Do not merge. Do not post another shipping line.
 
 A later observability push with status `recovered` or `resolved` is
@@ -118,7 +122,8 @@ metric is still off baseline, say so and stop. Do not launch a cloud
 agent from GitHub.
 
 A preview reminder asks you to confirm with `query_metrics` and then
-`close_incident`. `close_incident` posts a resolved Slack message with
+`close_incident`. The watch stops after about 45 minutes, or when the
+incident is closed. `close_incident` posts a resolved Slack message with
 before and after numbers, comments on Linear, closes the ticket, and
 cancels the reminder.
 

@@ -53,7 +53,7 @@ async function applySignoffLocked(input: {
     const posted = await postSlack({
       host: input.host,
       incident: { ...incident, signedOffAt, signedOffNote: input.note },
-      text: fixInProgressText(input.incidentId),
+      text: fixInProgressText(incident),
       thread: true,
     });
     if (posted.posted) {

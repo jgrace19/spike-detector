@@ -2,7 +2,7 @@ import type { HostContext, ReminderDefinition, ReminderInfo } from "@cursor/bdk"
 import { linkPullRequest } from "./deploy.js";
 import { incidentContinuation, previewEnv } from "./demo.js";
 import { getIncident, putIncident } from "./incidents.js";
-import previewWatch from "../reminders/preview_watch.js";
+import previewWatch, { PREVIEW_WATCH_DEADLINE_MS } from "../reminders/preview_watch.js";
 import signoffWatch from "../reminders/signoff_watch.js";
 
 export async function armSignoffWatch(
@@ -45,6 +45,7 @@ export async function armPreviewWatch(
       prNumber: input.prNumber,
       metric: input.metric,
       env: previewEnv(input.prNumber),
+      deadline: new Date(Date.now() + PREVIEW_WATCH_DEADLINE_MS).toISOString(),
     },
   });
 }

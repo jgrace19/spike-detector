@@ -1,6 +1,9 @@
 import type { AuthContext, HostKvApi } from "@cursor/bdk";
 import { incidentContinuation } from "./demo.js";
+import { readIds, rememberId } from "./id-index.js";
 import { isRecord, toJson } from "./json.js";
+
+const INCIDENT_INDEX_KEY = "incident-ids";
 
 export type IncidentStatus = "received" | "expected" | "bug" | "closed";
 
@@ -26,6 +29,10 @@ export type IncidentRecord = {
   cloudAgentUrl?: string;
   /** Branch the cloud agent started from. Fix PRs target this ref. */
   startingRef?: string;
+  /** Head branch of the fix pull request, when a read or an earlier ship stored it. */
+  headBranch?: string;
+  /** Head commit of the fix pull request, when a read or an earlier ship stored it. */
+  headSha?: string;
   linearIssueId?: string;
   linearIssueUrl?: string;
   slackChannelId?: string;
@@ -87,6 +94,19 @@ export async function getIncident(
 
 export async function putIncident(kv: HostKvApi, record: IncidentRecord): Promise<void> {
   await kv.put(incidentKey(record.incidentId), toJson(record));
+  await rememberId(kv, INCIDENT_INDEX_KEY, record.incidentId);
+}
+
+export async function listIncidentIds(kv: HostKvApi): Promise<string[]> {
+  return readIds(kv, INCIDENT_INDEX_KEY);
+}
+
+export async function deleteIncident(kv: HostKvApi, incidentId: string): Promise<void> {
+  await kv.delete(incidentKey(incidentId));
+}
+
+export function incidentIndexKey(): string {
+  return INCIDENT_INDEX_KEY;
 }
 
 export async function updateIncident(

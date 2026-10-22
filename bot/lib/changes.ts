@@ -61,7 +61,7 @@ export async function listChanges(input: {
         owner: demo.owner,
         repo: demo.repo,
         base: productionRef,
-        state: "all",
+        state: "closed",
         sort: "updated",
         direction: "desc",
         per_page: 15,
@@ -80,6 +80,9 @@ export async function listChanges(input: {
     });
     const sinceMs = Date.parse(bounds.since);
     const pulls: ChangePull[] = pullResponse.data.flatMap((pull) => {
+      if (pull.merged_at == null) {
+        return [];
+      }
       const updatedAt = pull.updated_at;
       if (Date.parse(updatedAt) < sinceMs) {
         return [];
@@ -91,7 +94,7 @@ export async function listChanges(input: {
           body: (pull.body ?? "").slice(0, 800),
           url: pull.html_url,
           updatedAt,
-          merged: pull.merged_at !== null,
+          merged: true,
           inAlertWindow: Date.parse(updatedAt) >= alertSince,
         },
       ];
@@ -128,7 +131,7 @@ async function fixtureChanges(
     since: bounds.since,
     alertSince: bounds.alertSince,
     commits: commits.filter(isCommit).map((commit) => ({ ...commit, inAlertWindow: true })),
-    pulls: pulls.filter(isPull).map((pull) => ({ ...pull, inAlertWindow: true })),
+    pulls: pulls.filter(isPull).flatMap((pull) => (pull.merged ? [{ ...pull, inAlertWindow: true }] : [])),
   };
 }
 

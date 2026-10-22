@@ -172,9 +172,21 @@ export function triageErrorPayload(incident: IncidentRecord, detail: string): Sl
   return { text, blocks };
 }
 
-export function fixInProgressText(incidentId: string): string {
-  return `🛠️ Fix in progress · incident:${incidentId}`;
+export function fixInProgressText(
+  incident: Pick<IncidentRecord, "incidentId" | "cloudAgentUrl" | "cloudAgentId">,
+): string {
+  const storedUrl = incident.cloudAgentUrl;
+  const href =
+    storedUrl !== undefined && storedUrl !== ""
+      ? storedUrl
+      : incident.cloudAgentId !== undefined && incident.cloudAgentId !== ""
+        ? `https://cursor.com/agents/${incident.cloudAgentId}`
+        : undefined;
+  const link = href === undefined ? "" : ` <${href}|View the fix agent run>`;
+  return `🛠️ Fix in progress · incident:${incident.incidentId}${link}`;
 }
+
+export const SHIP_FAILED_TEXT = "Couldn't ship this fix to production.";
 
 export function pullRequestPayload(url: string, prNumber: number | undefined): SlackPayload {
   const label = prNumber === undefined ? "pull request" : `#${prNumber}`;
