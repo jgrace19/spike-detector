@@ -14,6 +14,7 @@ export default defineAgent({
   tools: ["read", "grep", "glob", "ls"],
   hosting: {
     egressDomains: ["mcp.linear.app"],
+    // DEPLOY_HOOK_URL is optional. When it is unset, a ship does not call the hook.
     secretNames: [
       "OBSERVABILITY_SHARED_SECRET",
       "SPIKE_DETECTOR_SLACK_CHANNEL",
@@ -22,6 +23,7 @@ export default defineAgent({
       "LINEAR_PROJECT",
       "LINEAR_TEAM",
       "LINEAR_TOKEN",
+      "DEPLOY_HOOK_URL",
     ],
   },
 });

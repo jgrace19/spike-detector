@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { HostContext, HostKvApi, JsonValue } from "@cursor/bdk";
 import { catchAuthDeclaration } from "@cursor/bdk/channels";
+import { dispatchOutcome } from "../../node_modules/@cursor/bdk/dist/internal/channel-dispatch.js";
+import { replayCatchRequest } from "../../node_modules/@cursor/bdk/dist/internal/hosted-catch.js";
 import observability from "../channels/observability.js";
 import { getIncident, putIncident, type IncidentRecord } from "./incidents.js";
 import { resetObservability } from "./reset.js";
@@ -118,4 +120,72 @@ test("shipped route lists unresolved ships and reset clears them", async () => {
 
   const direct = await resetObservability(host);
   assert.deepEqual(direct, { ok: true, closed: [], cleared: [] });
+});
+
+test("a hosted reset replay with admin:reset clears state and does not start triage", async () => {
+  const kv = memoryKv();
+  await putIncident(kv, incident({ incidentId: "inc-open", previewReminderId: "rem-open" }));
+  await putShipped(kv, {
+    incidentId: "inc-open",
+    prNumber: 42,
+    threadTs: "100.1",
+    shippedAt: "2026-10-22T01:00:00.000Z",
+    branch: "fix/checkout-pricing",
+    headSha: "abc123",
+  });
+  const sends: string[] = [];
+  const host = {
+    kv,
+    reminders: {
+      async cancel() {
+        return undefined;
+      },
+      async cancelForContinuation() {
+        return 0;
+      },
+    },
+  } as unknown as HostContext;
+  const response = await replayCatchRequest({
+    channelId: "observability",
+    deliveryId: "dlv_reset",
+    routes: observability.routes ?? [],
+    payload: {
+      v: 1,
+      method: "POST",
+      path: "/reset",
+      query: "",
+      headers: {
+        "content-type": "application/json",
+        "x-bdk-session-key": "admin:reset",
+        "x-observability-token": "secret",
+      },
+      body: {
+        encoding: "utf8",
+        data: JSON.stringify({
+          incidentId: "inc-open",
+          metric: "freshcart.checkout.gmv_cents",
+          env: "prod",
+          baseline: 100000,
+          value: 68000,
+          window: "30m",
+        }),
+      },
+      receivedAt: "2026-10-22T12:00:00.000Z",
+    },
+    args: {
+      host,
+      async send(message: string) {
+        sends.push(message);
+        throw new Error("reset must not start a turn");
+      },
+      waitUntil() {},
+    } as never,
+  });
+  assert.equal(response.ok, true);
+  assert.equal(dispatchOutcome(response), "skip");
+  assert.deepEqual(sends, []);
+  assert.equal(await getIncident(kv, "inc-open"), undefined);
+  assert.equal(await getShipped(kv, "inc-open"), undefined);
+  const body = (await response.json()) as { ok?: boolean };
+  assert.equal(body.ok, true);
 });

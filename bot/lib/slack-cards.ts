@@ -188,6 +188,8 @@ export function fixInProgressText(
 
 export const SHIP_FAILED_TEXT = "Couldn't ship this fix to production.";
 
+export const DEPLOY_HOOK_FAILED_TEXT = "Couldn't reach the production deploy pipeline";
+
 export function pullRequestPayload(url: string, prNumber: number | undefined): SlackPayload {
   const label = prNumber === undefined ? "pull request" : `#${prNumber}`;
   return {

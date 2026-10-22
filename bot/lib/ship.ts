@@ -1,4 +1,5 @@
 import type { HostContext } from "@cursor/bdk";
+import { notifyDeployHook } from "./deploy-hook.js";
 import { demo, codeOwnerSlackId } from "./demo.js";
 import { getIncident, updateIncident, type IncidentRecord } from "./incidents.js";
 import { isRecord } from "./json.js";
@@ -6,6 +7,7 @@ import { postSlack } from "./notify.js";
 import { serialize } from "./serialize.js";
 import { incidentForSlackTs } from "./slack-signoff.js";
 import {
+  DEPLOY_HOOK_FAILED_TEXT,
   shipReviewPayload,
   shipReviewSummary,
   shippingPayload,
@@ -130,6 +132,7 @@ async function approveLocked(input: {
   });
   let current = recorded ?? incident;
 
+  let shippingFailure: string | undefined;
   if (current.shippingPostedAt === undefined) {
     const payload = shippingPayload();
     const posted = await postSlack({
@@ -140,13 +143,33 @@ async function approveLocked(input: {
       thread: true,
     });
     if (!posted.posted) {
-      return { status: "failed", reason: posted.reason };
+      shippingFailure = posted.reason;
+    } else {
+      const updated = await updateIncident(input.host.kv, current.incidentId, {
+        shippingPostedAt: new Date().toISOString(),
+      });
+      if (updated !== undefined) {
+        current = updated;
+      }
     }
-    const updated = await updateIncident(input.host.kv, current.incidentId, {
-      shippingPostedAt: new Date().toISOString(),
+  }
+
+  const hook = await notifyDeployHook({
+    incidentId: current.incidentId,
+    prNumber,
+    branch: branch ?? "",
+    headSha: headSha ?? "",
+  });
+  if (hook.status === "failed") {
+    console.warn(`[spike-detector] deploy hook failed: ${hook.reason}`);
+    const noted = await postSlack({
+      host: input.host,
+      incident: current,
+      text: DEPLOY_HOOK_FAILED_TEXT,
+      thread: true,
     });
-    if (updated !== undefined) {
-      current = updated;
+    if (!noted.posted) {
+      console.warn(`[spike-detector] deploy hook note failed: ${noted.reason}`);
     }
   }
 
@@ -161,6 +184,9 @@ async function approveLocked(input: {
     } catch (error) {
       console.warn(`[spike-detector] ship comment failed: ${errorText(error)}`);
     }
+  }
+  if (shippingFailure !== undefined) {
+    return { status: "failed", reason: shippingFailure };
   }
   return { status: "shipped", prNumber };
 }
