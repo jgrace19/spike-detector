@@ -96,11 +96,19 @@ export async function closeLinearIssue(
   }
   let stateName: string | undefined;
   if (statuses !== undefined) {
-    const listed = await call(mcp, statuses.name, {});
+    // Linear's list_issue_statuses requires a team; an empty call errors.
+    const team = await resolveTeam(mcp, tools.tools);
+    const args: Record<string, unknown> = {};
+    if (team !== undefined) {
+      assign(args, statuses, ["team", "teamId", "team_id"], team);
+    }
+    const listed = await call(mcp, statuses.name, args);
     if (listed.status === "ready") {
       stateName = completedStatusName(listed.text);
     }
   }
+  // Every Linear team ships a "Done" completed state by default.
+  stateName ??= "Done";
   if (stateName === undefined) {
     return {
       ok: false,
@@ -375,4 +383,20 @@ function tryParse(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+async function resolveTeam(mcp: HostMcpRegistry, tools: HostMcpToolInfo[]): Promise<string | undefined> {
+  const override = process.env.LINEAR_TEAM?.trim();
+  if (override) {
+    return override;
+  }
+  const teams = tools.find((tool) => LIST_TEAMS.test(tool.name));
+  if (teams === undefined) {
+    return undefined;
+  }
+  const teamList = await call(mcp, teams.name, {});
+  if (teamList.status === "error") {
+    return undefined;
+  }
+  return firstTeam(tryParse(teamList.text) ?? teamList.text);
 }
