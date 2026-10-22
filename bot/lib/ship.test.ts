@@ -10,12 +10,19 @@ import {
   observabilityAlertSchema,
 } from "./recovery.js";
 import { handleSlackReaction } from "../channels/slack.js";
-import { SHIP_FAILED_TEXT, SHIP_REVIEW_TEXT, SHIPPING_TEXT, shipReviewSummary } from "./slack-cards.js";
+import {
+  DEPLOY_HOOK_FAILED_TEXT,
+  SHIP_FAILED_TEXT,
+  SHIP_REVIEW_TEXT,
+  SHIPPING_TEXT,
+  shipReviewSummary,
+} from "./slack-cards.js";
 import { rememberSlackMessage } from "./slack-index.js";
 import { handleShipReaction, shipApprovalComment } from "./ship.js";
 import { getShipped, putShipped, shippedKey } from "./shipped.js";
 
 process.env.SPIKE_DETECTOR_CODE_OWNER_SLACK_ID = "UOWNER";
+delete process.env.DEPLOY_HOOK_URL;
 
 const PR_URL = "https://github.com/jgrace19/marketplace/pull/42";
 
@@ -489,4 +496,76 @@ test("a ship that cannot start posts a note in the thread", async () => {
   assert.equal(posts.filter((post) => post.text === SHIP_FAILED_TEXT).length, 1);
   assert.equal(posts.some((post) => post.thread_ts === "100.1"), true);
   assert.equal(await getShipped(kv, "inc-nopr"), undefined);
+});
+
+test("a recorded ship pushes the deploy hook and a failure stays in the thread", async () => {
+  const previousUrl = process.env.DEPLOY_HOOK_URL;
+  const previousToken = process.env.OBSERVABILITY_SHARED_SECRET;
+  process.env.DEPLOY_HOOK_URL = "https://hooks.example.com";
+  process.env.OBSERVABILITY_SHARED_SECRET = "hook-secret";
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), init: init ?? {} });
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  try {
+    const kv = memoryKv();
+    await putIncident(kv, incident({ shipReviewSlackTs: "100.3" }));
+    await rememberSlackMessage(kv, "100.3", { incidentId: "inc-1001", role: "ship_review" });
+    const { host, posts } = fakeHost(kv);
+    const react = () =>
+      handleShipReaction(host, {
+        threadTs: "100.3",
+        channelId: "C1",
+        reaction: { name: "rocket" },
+        author: { userId: "UADA", userName: "ada" },
+      });
+    assert.equal((await react()).status, "shipped");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.url, "https://hooks.example.com/api/ship-hook");
+    assert.equal(new Headers(calls[0]?.init.headers).get("X-Observability-Token"), "hook-secret");
+    assert.deepEqual(JSON.parse(String(calls[0]?.init.body)), {
+      incidentId: "inc-1001",
+      prNumber: 42,
+      branch: HEAD_BRANCH,
+      headSha: HEAD_SHA,
+    });
+    assert.equal(posts.some((post) => post.text === DEPLOY_HOOK_FAILED_TEXT), false);
+    assert.equal((await react()).status, "already");
+    assert.equal(calls.length, 1);
+
+    const failedKv = memoryKv();
+    await putIncident(failedKv, incident({ incidentId: "inc-hook", shipReviewSlackTs: "100.9" }));
+    await rememberSlackMessage(failedKv, "100.9", { incidentId: "inc-hook", role: "ship_review" });
+    const failedHost = fakeHost(failedKv);
+    globalThis.fetch = (async () => {
+      throw new Error("connect ECONNREFUSED");
+    }) as typeof fetch;
+    const warnings = await withWarnings(async () => {
+      const shipped = await handleShipReaction(failedHost.host, {
+        threadTs: "100.9",
+        channelId: "C1",
+        reaction: { name: "rocket" },
+        author: { userId: "UADA" },
+      });
+      assert.equal(shipped.status, "shipped");
+    });
+    assert.match(warnings.join("\n"), /deploy hook failed/);
+    assert.equal(failedHost.posts.filter((post) => post.text === DEPLOY_HOOK_FAILED_TEXT).length, 1);
+    assert.equal(failedHost.posts.filter((post) => post.text === SHIPPING_TEXT).length, 1);
+    assert.equal((await getShipped(failedKv, "inc-hook"))?.prNumber, 42);
+  } finally {
+    globalThis.fetch = original;
+    if (previousUrl === undefined) {
+      delete process.env.DEPLOY_HOOK_URL;
+    } else {
+      process.env.DEPLOY_HOOK_URL = previousUrl;
+    }
+    if (previousToken === undefined) {
+      delete process.env.OBSERVABILITY_SHARED_SECRET;
+    } else {
+      process.env.OBSERVABILITY_SHARED_SECRET = previousToken;
+    }
+  }
 });

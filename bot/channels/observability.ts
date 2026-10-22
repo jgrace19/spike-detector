@@ -112,9 +112,14 @@ export default defineChannel({
       },
     }),
     POST("/reset", {
-      description: "Close every open incident and clear shipped records.",
+      description:
+        "Close every open incident and clear shipped records. Does not start a model turn, including when the caller sends X-BDK-Session-Key.",
       bodySchema: z.object({}),
       handler: async (_request, route) => {
+        // Hosted custom routes are replayed after a 202. The session key
+        // (for example admin:reset) only names that delivery's mailbox.
+        // This handler never calls send, so the replay is a skip and does
+        // not start triage.
         const result = await resetObservability(route.host);
         return Response.json(result);
       },
