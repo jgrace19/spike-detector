@@ -13,7 +13,7 @@ export const demo = {
   repoUrl: "https://github.com/jgrace19/marketplace",
   defaultStartingRef: "demo/base",
   linearWorkspace: "fe-demo",
-  defaultLinearProject: "Marketplace",
+  defaultLinearProject: "FreshCart",
   observabilitySecret: "OBSERVABILITY_SHARED_SECRET",
   slackChannelEnv: "SPIKE_DETECTOR_SLACK_CHANNEL",
   codeOwnerEnv: "SPIKE_DETECTOR_CODE_OWNER_SLACK_ID",
