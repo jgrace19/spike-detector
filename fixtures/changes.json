@@ -29,5 +29,26 @@
       }
     ],
     "pulls": []
+  },
+  "mixed-prs": {
+    "commits": [],
+    "pulls": [
+      {
+        "number": 1,
+        "title": "Open checkout fix",
+        "body": "not merged",
+        "url": "https://github.com/jgrace19/marketplace/pull/1",
+        "updatedAt": "2026-10-22T00:00:00Z",
+        "merged": false
+      },
+      {
+        "number": 2,
+        "title": "Merged checkout fix",
+        "body": "merged",
+        "url": "https://github.com/jgrace19/marketplace/pull/2",
+        "updatedAt": "2026-10-22T00:00:00Z",
+        "merged": true
+      }
+    ]
   }
 }

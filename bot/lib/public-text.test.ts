@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { alertPayload, triagePayload } from "./slack-cards.js";
+import { alertPayload, fixInProgressText, triagePayload } from "./slack-cards.js";
 import { fixStopReady } from "./cloud-watch-ready.js";
 import { isApprovalReply, parseStopWake, severityLabel } from "./public-text.js";
 import { parseTriageReport, reportAsPlan } from "./triage-report.js";
@@ -110,4 +110,19 @@ test("severity and plan scrub", () => {
     parseTriageReport("root_cause: datacat flagged demo/base\nreal cause is the pricing function"),
   );
   assert.doesNotMatch(scrubbed, /datacat|demo\/base/i);
+});
+
+test("fix in progress links the cloud agent run", () => {
+  const withUrl = fixInProgressText(incident);
+  assert.match(withUrl, /🛠️ Fix in progress · incident:inc-1001/);
+  assert.match(withUrl, /<https:\/\/cursor.com\/agents\/bc-test\|View the fix agent run>/);
+  const withId = fixInProgressText({
+    incidentId: "inc-1001",
+    cloudAgentUrl: undefined,
+    cloudAgentId: "bc-2",
+  });
+  assert.match(withId, /<https:\/\/cursor.com\/agents\/bc-2\|View the fix agent run>/);
+  const plain = fixInProgressText({ incidentId: "inc-1001" });
+  assert.equal(plain, "🛠️ Fix in progress · incident:inc-1001");
+  assert.doesNotMatch(`${withUrl}\n${withId}\n${plain}`, /datacat|demo/i);
 });

@@ -4,13 +4,17 @@ import { validationMetrics } from "../lib/demo.js";
 import { getIncident } from "../lib/incidents.js";
 import { checkValidationMetrics } from "../lib/metrics.js";
 
+/** Stop a preview watch about 45 minutes after it is armed. */
+export const PREVIEW_WATCH_DEADLINE_MS = 45 * 60 * 1000;
+
 /**
  * Polls the same KV snapshots as `query_metrics`. Reminder handlers have no
  * `callTool` (see ReminderFireContext), so the follow-up turn is what calls
  * the tool before closing the incident.
  *
  * A tick does nothing until the preview is ready: CI on the pull request
- * succeeded, or the first `preview-<pr>` snapshot was stored.
+ * succeeded, or the first `preview-<pr>` snapshot was stored. The watch
+ * stops once the incident is closed, or once `args.deadline` has passed.
  */
 export default defineReminder({
   async run({ args, followup, host, cancel }) {
@@ -23,6 +27,11 @@ export default defineReminder({
     const incident = await getIncident(host.kv, incidentId);
     if (incident === undefined || incident.status === "closed") {
       await cancel("incident closed");
+      return { action: "stop" };
+    }
+    const deadline = typeof args.deadline === "string" ? Date.parse(args.deadline) : Number.NaN;
+    if (Number.isFinite(deadline) && Date.now() >= deadline) {
+      await cancel("watch deadline");
       return { action: "stop" };
     }
     const ready = await isDeployReady(host.kv, incident, prNumber);
