@@ -18,7 +18,7 @@ Defaults chosen for this demo:
 - Recovery band: 10% of `max(|baseline|, 1)`
 - Explanation band in the skill: 15% of a stated target
 - Linear workspace `fe-demo`. Project defaults to `Marketplace`, overridable with `LINEAR_PROJECT`
-- Linear connector name `Linear` (see the TODO in `bot/mcp-connections/account.ts`)
+- Linear MCP is `https://mcp.linear.app/mcp` with a fe-demo personal API key (`LINEAR_TOKEN`), not the team's Cursor Linear connector
 - Deploy ready: GitHub CI success on the fix pull request, or the first `preview-<pr>` metric snapshot. No deployment-host URL
 
 ## Flow
@@ -132,10 +132,14 @@ Until those are set, `page_code_owner` returns
 
 ### Linear
 
-Connect Linear on the Cursor account that hosts the bot. Issues go to
-workspace `fe-demo`. The project name defaults to `Marketplace`. Set
-`LINEAR_PROJECT` to use another project in that workspace. The connection
-is `optional` so the process still starts before that connector exists.
+Linear is a direct MCP connection to `https://mcp.linear.app/mcp`, with
+header `authorization: Bearer ${LINEAR_TOKEN}`. Create `LINEAR_TOKEN` as a
+personal API key in the fe-demo Linear workspace. The team's Cursor Linear
+integration points at a different workspace, so this bot does not use it.
+Issues still go to workspace `fe-demo`. The project name defaults to
+`Marketplace`. Set `LINEAR_PROJECT` to use another project there. The
+connection is `optional`, so a missing token omits Linear instead of
+failing the turn. GitHub events stay on the channel's Cursor account.
 
 ### Cloud agent ref
 
@@ -174,6 +178,7 @@ printf %s "$SPIKE_DETECTOR_SLACK_CHANNEL" | npx bdk secret set spike-detector SP
 printf %s "$SPIKE_DETECTOR_CODE_OWNER_SLACK_ID" | npx bdk secret set spike-detector SPIKE_DETECTOR_CODE_OWNER_SLACK_ID
 printf %s "demo/base" | npx bdk secret set spike-detector MARKETPLACE_STARTING_REF
 printf %s "Marketplace" | npx bdk secret set spike-detector LINEAR_PROJECT
+printf %s "$LINEAR_TOKEN" | npx bdk secret set spike-detector LINEAR_TOKEN
 npx bdk secret list spike-detector
 ```
 
@@ -181,8 +186,8 @@ Slack bot tokens come from `bdk slack create`, not from this list. The
 first deploy prints an alias token once. Store it outside the terminal
 transcript. The stable route is `$AGENT_ALIAS_URL`.
 
-No extra egress hosts are declared. GitHub, Slack, and account-level
-Linear calls go through the host clients and the Cursor backend.
+Egress includes `mcp.linear.app` for the Linear MCP server. GitHub and
+Slack go through the host clients and the Cursor backend.
 
 ## Required secrets
 
@@ -195,6 +200,7 @@ Linear calls go through the host clients and the Cursor backend.
 | `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | The `@` mention. Empty posts without a mention |
 | `MARKETPLACE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
 | `LINEAR_PROJECT` | Optional. Empty uses project `Marketplace` in workspace `fe-demo` |
+| `LINEAR_TOKEN` | Linear personal API key created in the fe-demo workspace |
 
 The host also needs a Cursor credential (`bdk login`, `CURSOR_API_KEY`,
 or `CURSOR_SERVICE_ACCOUNT_KEY`) to run model turns and cloud agents.
@@ -271,7 +277,7 @@ open Linear issues, or launch cloud agents. `list_recent_changes` reads
 | `bot/channels/github.ts` | Pull request and CI wakes for `jgrace19/marketplace` |
 | `bot/channels/slack.ts` | Sign-off thread |
 | `bot/extensions/cloud/` | Cloud agents on marketplace. Launch and reply are disabled |
-| `bot/mcp-connections/account.ts` | Cursor account Linear |
+| `bot/mcp-connections/linear.ts` | Linear MCP at `mcp.linear.app` with `LINEAR_TOKEN` |
 | `bot/tools/` | One tool per file |
 | `bot/reminders/` | Sign-off backup wake and preview poll |
 | `evals/` | Expected and bug cases |
@@ -279,8 +285,6 @@ open Linear issues, or launch cloud agents. `list_recent_changes` reads
 ## TODOs
 
 - Confirm hosted auth if the secret header alone returns 401 (above).
-- Add connector name `Linear MCP` if `servers: ["Linear"]` does not match
-  the dashboard connector.
 - `close_incident` returns a TODO in the tool result when it cannot find
   a completed Linear status. Finish that close with the advertised Linear
   tools.

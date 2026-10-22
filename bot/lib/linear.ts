@@ -2,7 +2,7 @@ import type { HostMcpCallResult, HostMcpRegistry, HostMcpToolInfo } from "@curso
 import { demo, linearProjectName } from "./demo.js";
 import { isRecord } from "./json.js";
 
-const CONNECTION = "account";
+const CONNECTION = "linear";
 
 const LIST_PROJECTS = /(?:list|search|get)[_-]?(?:projects|project)$/i;
 const LIST_TEAMS = /(?:list|search|get)[_-]?teams?$/i;
@@ -136,7 +136,7 @@ async function loadTools(mcp: HostMcpRegistry): Promise<ToolsLoaded> {
   if (!mcp.names().includes(CONNECTION)) {
     return {
       status: "error",
-      result: { ok: false, reason: "not_connected", message: "Linear account connection is not loaded" },
+      result: { ok: false, reason: "not_connected", message: "Linear connection is not loaded" },
     };
   }
   try {
