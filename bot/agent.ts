@@ -13,7 +13,7 @@ export default defineAgent({
   local: { sandbox: true },
   tools: ["read", "grep", "glob", "ls"],
   hosting: {
-    egressDomains: ["mcp.linear.app"],
+    egressDomains: ["mcp.linear.app", "*.trycloudflare.com"],
     // DEPLOY_HOOK_URL is optional. When it is unset, a ship does not call the hook.
     secretNames: [
       "OBSERVABILITY_SHARED_SECRET",
