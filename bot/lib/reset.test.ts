@@ -98,6 +98,7 @@ test("shipped route lists unresolved ships and reset clears them", async () => {
         shippedAt: "2026-10-22T01:00:00.000Z",
       },
     ],
+    recoveries: {},
   });
 
   const resetResponse = await resetRoute.handler(new Request("http://127.0.0.1/v1/channels/observability/reset"), {
@@ -116,7 +117,7 @@ test("shipped route lists unresolved ships and reset clears them", async () => {
   const after = await shippedRoute.handler(new Request("http://127.0.0.1/v1/channels/observability/shipped"), {
     host,
   } as never);
-  assert.deepEqual(await after.json(), { items: [] });
+  assert.deepEqual(await after.json(), { items: [], recoveries: {} });
 
   const direct = await resetObservability(host);
   assert.deepEqual(direct, { ok: true, closed: [], cleared: [] });

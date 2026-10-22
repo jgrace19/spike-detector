@@ -91,7 +91,7 @@ export async function listUnresolvedShipped(kv: HostKvApi): Promise<ShippedItem[
       continue;
     }
     const incident = await getIncident(kv, incidentId);
-    if (incident?.status === "closed" || incident?.resolutionPostedAt !== undefined) {
+    if (incident?.status === "closed") {
       continue;
     }
     items.push({

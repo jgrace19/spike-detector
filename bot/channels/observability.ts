@@ -6,9 +6,11 @@ import { getIncident, principalFromAuth, putIncident } from "../lib/incidents.js
 import { appendSnapshot } from "../lib/metrics.js";
 import { formatAlertPrompt } from "../lib/prompts.js";
 import { resetObservability } from "../lib/reset.js";
-import { listUnresolvedShipped } from "../lib/shipped.js";
+import { listShippedIds, listUnresolvedShipped } from "../lib/shipped.js";
 import {
   handleProductionRecovery,
+  needsTurnFallback,
+  getRecoveryRecord,
   observabilityAlertDecision,
   observabilityAlertSchema,
 } from "../lib/recovery.js";
@@ -48,13 +50,19 @@ export default defineChannel({
       handler: async (_request, route) => {
         const body = route.body;
         if (observabilityAlertDecision(body.status) === "recovery") {
-          route.waitUntil(
-            handleProductionRecovery(route.host, body).catch((error: unknown) => {
-              console.warn(
-                `[spike-detector] production recovery failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            }),
-          );
+          // Hosted admission awaits this handler, so the outcome is known here
+          // and a failed close-out can still hand off to a model turn.
+          const outcome = await handleProductionRecovery(route.host, body);
+          if (needsTurnFallback(outcome)) {
+            console.log(
+              `[spike-detector] recovery ${body.incidentId} handing off to a model turn (${outcome.reason ?? "unknown"})`,
+            );
+            await route.send(formatRecoveryFallbackPrompt(body.incidentId, outcome), {
+              continuationToken: incidentContinuation(body.incidentId),
+              admission: "coalesce",
+              title: `Incident ${body.incidentId}`,
+            });
+          }
           return new Response(null, { status: 202 });
         }
         const existing = await getIncident(route.host.kv, body.incidentId);
@@ -104,11 +112,19 @@ export default defineChannel({
       },
     }),
     GET("/shipped", {
-      description: "List shipped incidents that have not resolved yet.",
+      description: "List shipped incidents that have not resolved yet, plus the last recorded recovery outcome per shipped incident.",
       querySchema: z.object({}),
       handler: async (_request, route) => {
         const items = await listUnresolvedShipped(route.host.kv);
-        return Response.json({ items });
+        const recoveries: Record<string, unknown> = {};
+        for (const incidentId of await listShippedIds(route.host.kv)) {
+          const record = await getRecoveryRecord(route.host.kv, incidentId);
+          if (record !== undefined) {
+            const { body: _body, ...rest } = record;
+            recoveries[incidentId] = rest;
+          }
+        }
+        return Response.json({ items, recoveries });
       },
     }),
     POST("/reset", {
@@ -126,3 +142,14 @@ export default defineChannel({
     }),
   ],
 });
+
+function formatRecoveryFallbackPrompt(
+  incidentId: string,
+  outcome: { reason?: string; message?: string },
+): string {
+  return [
+    `Production recovered for incident ${incidentId}, but the automatic close-out did not finish (${outcome.reason ?? "unknown"}${outcome.message === undefined ? "" : `: ${outcome.message}`}).`,
+    `Call finish_production_close with incidentId ${incidentId}. It posts the resolution once and marks the Linear issue done with a resolved comment.`,
+    "Do not call close_incident for this. Do not post anything else.",
+  ].join("\n");
+}
