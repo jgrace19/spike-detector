@@ -13,12 +13,14 @@ export default defineAgent({
   local: { sandbox: true },
   tools: ["read", "grep", "glob", "ls"],
   hosting: {
+    egressDomains: ["mcp.linear.app"],
     secretNames: [
       "OBSERVABILITY_SHARED_SECRET",
       "SPIKE_DETECTOR_SLACK_CHANNEL",
       "SPIKE_DETECTOR_CODE_OWNER_SLACK_ID",
       "MARKETPLACE_STARTING_REF",
       "LINEAR_PROJECT",
+      "LINEAR_TOKEN",
     ],
   },
 });
