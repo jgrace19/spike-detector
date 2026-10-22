@@ -1,4 +1,5 @@
 import { defaultOnAppMention, slackChannel } from "@cursor/bdk/channels/slack";
+import { handleShipReaction } from "../lib/ship.js";
 import { handleApproveButton, handleSignoffReaction, handleSignoffReply } from "../lib/slack-signoff.js";
 
 /**
@@ -6,6 +7,8 @@ import { handleApproveButton, handleSignoffReaction, handleSignoffReply } from "
  * `bdk slack create`. A thumbs-up or approve reply on the triage message
  * records sign-off in the handler and does not start a model turn, so one
  * reaction cannot produce two replies. Reactions on the alert are ignored.
+ * A rocket reaction is handled only on the ship-review message. It labels
+ * the pull request and does not merge or start a model turn.
  * Thread replies are watched so "approve" counts without an @mention when
  * the host delivers them.
  */
@@ -37,6 +40,7 @@ export default slackChannel({
     return null;
   },
   onReactionAdded: async (ctx, message) => {
+    await handleShipReaction(ctx.host, message);
     await handleSignoffReaction(ctx.host, message);
     return null;
   },

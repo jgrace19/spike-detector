@@ -28,7 +28,7 @@ export async function handleSignoffReaction(host: HostContext, message: SlackLik
     return;
   }
   const reactedTs = message.threadTs;
-  const incident = await incidentForMessage(host, reactedTs, message.channelId);
+  const incident = await incidentForSlackTs(host, reactedTs, message.channelId);
   if (incident === undefined || incident.triageSlackTs !== reactedTs) {
     return;
   }
@@ -55,7 +55,7 @@ export async function handleSignoffReply(
   if (!isApprovalReply(text)) {
     return "ignore";
   }
-  const incident = await incidentForMessage(host, message.threadTs, message.channelId);
+  const incident = await incidentForSlackTs(host, message.threadTs, message.channelId);
   if (
     incident === undefined ||
     incident.triageSlackTs === undefined ||
@@ -97,7 +97,7 @@ export async function handleApproveButton(
   }
 }
 
-async function incidentForMessage(host: HostContext, ts: string, channelId: string) {
+export async function incidentForSlackTs(host: HostContext, ts: string, channelId: string) {
   const indexed = await lookupSlackMessage(host.kv, ts);
   if (indexed !== undefined) {
     return getIncident(host.kv, indexed.incidentId);

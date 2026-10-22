@@ -1,7 +1,7 @@
 import { INCIDENT_ID_PATTERN } from "./demo.js";
 
 const LEAK =
-  /\b(demo\/base|demo branch|mock metrics(?: platform)?|MARKETPLACE_STARTING_REF|startingRef|demo setup|not in prod|only on a demo)\b/i;
+  /\b(demo\/base|demo branches?|mock metrics(?: platform)?|MARKETPLACE_STARTING_REF|startingRef|demo setup|not in prod|only on a demo|datacat)\b/i;
 
 const INCIDENT_IN_TEXT = /incident:([A-Za-z0-9][A-Za-z0-9._:-]{0,119})/;
 

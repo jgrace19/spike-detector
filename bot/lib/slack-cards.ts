@@ -184,6 +184,115 @@ export function pullRequestPayload(url: string, prNumber: number | undefined): S
   };
 }
 
+/** One sentence for the ship-review card. Drops lines that name internal setup. */
+export function shipReviewSummary(report: string | undefined): string {
+  const line = scrubPublicText(report ?? "")
+    .split("\n")
+    .map((item) => item.replace(/^Root cause:\s*/i, "").trim())
+    .find((item) => item !== "" && !item.startsWith("-") && !/^plan:$/i.test(item));
+  if (line === undefined) {
+    return "Checkout metrics are ready for a production decision.";
+  }
+  return line.length > 180 ? `${line.slice(0, 177)}…` : line;
+}
+
+export const SHIP_REVIEW_TEXT = "Fix is ready for review · React 🚀 to ship to production";
+
+export const SHIPPING_TEXT = "🚀 Shipping to production…";
+
+export function shipReviewPayload(input: {
+  incidentId: string;
+  ownerId: string;
+  prUrl: string;
+  prNumber: number | undefined;
+  summary: string;
+}): SlackPayload {
+  const mention = input.ownerId === "" ? "" : `<@${input.ownerId}> `;
+  const headline = `${mention}${SHIP_REVIEW_TEXT}`;
+  const label = input.prNumber === undefined ? "pull request" : `#${input.prNumber}`;
+  const summary = scrubPublicText(input.summary);
+  const blocks: SlackBlock[] = [
+    header(":rocket: Fix is ready for review"),
+    section(headline),
+    section(`*Pull request* · <${input.prUrl}|${label}>`),
+    context(`${summary} · incident:${input.incidentId}`),
+  ];
+  const text = [SHIP_REVIEW_TEXT, mention.trim(), input.prUrl, summary, `incident:${input.incidentId}`]
+    .filter((line) => line !== "")
+    .join("\n");
+  return { text, blocks };
+}
+
+export function shippingPayload(): SlackPayload {
+  return {
+    text: SHIPPING_TEXT,
+    blocks: [section(SHIPPING_TEXT)],
+  };
+}
+
+export function productionResolvedPayload(input: {
+  incidentId: string;
+  gmv: { before?: number; after: number; baseline: number };
+  aov: { before?: number; after: number; baseline: number };
+  prUrl?: string;
+  prNumber?: number;
+  linearIssueId?: string;
+  linearIssueUrl?: string;
+}): SlackPayload {
+  const gmv = metricLine("GMV", input.gmv);
+  const aov = metricLine("AOV", input.aov);
+  const pr =
+    input.prUrl === undefined
+      ? "Pull request pending"
+      : input.prNumber === undefined
+        ? input.prUrl
+        : `<${input.prUrl}|#${input.prNumber}>`;
+  const linear =
+    input.linearIssueUrl !== undefined
+      ? `<${input.linearIssueUrl}|${input.linearIssueId ?? "Linear issue"}>`
+      : (input.linearIssueId ?? "No Linear issue");
+  const plainPr =
+    input.prUrl === undefined
+      ? "Pull request pending"
+      : input.prNumber === undefined
+        ? input.prUrl
+        : `#${input.prNumber} ${input.prUrl}`;
+  const plainLinear = input.linearIssueId ?? "No Linear issue";
+  const text = [
+    `:white_check_mark: Resolved · incident:${input.incidentId}`,
+    "GMV and average order value are back within 10% of baseline.",
+    gmv.plain,
+    aov.plain,
+    `Pull request: ${plainPr}`,
+    `Linear: ${plainLinear}`,
+  ].join("\n");
+  const blocks: SlackBlock[] = [
+    header(":white_check_mark: Resolved"),
+    section("GMV and average order value are back within 10% of baseline."),
+    section(`${gmv.mrkdwn}\n\n${aov.mrkdwn}`),
+    fields([
+      ["Pull request", pr],
+      ["Linear", linear],
+    ]),
+    context(`incident:${input.incidentId} · production`),
+  ];
+  return { text, blocks };
+}
+
+function metricLine(
+  label: string,
+  metric: { before?: number; after: number; baseline: number },
+): { plain: string; mrkdwn: string } {
+  const after = formatNumber(metric.after);
+  const baseline = formatNumber(metric.baseline);
+  const movement = changeLabel(metric.baseline, metric.after);
+  const transition =
+    metric.before === undefined ? after : `${formatNumber(metric.before)} → ${after}`;
+  const plain = `${label}: ${transition} (${movement}, baseline ${baseline})`;
+  const mrkdwn = `*${label}*\n${transition}\n${movement}, baseline ${baseline}`;
+  return { plain, mrkdwn };
+}
+
 export function resolvedPayload(input: {
   incident: IncidentRecord;
   env: string;

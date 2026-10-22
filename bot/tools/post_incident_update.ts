@@ -33,6 +33,12 @@ export default defineTool({
     if (incident.fixProgressPostedAt !== undefined && /fix in progress/i.test(text)) {
       return { posted: true, already: true, slack: "already", linear: "skipped" };
     }
+    if (incident.shipReviewSlackTs !== undefined && /fix is ready for review/i.test(text)) {
+      return { posted: true, already: true, slack: "already", linear: "skipped" };
+    }
+    if (incident.shippingPostedAt !== undefined && /shipping to production/i.test(text)) {
+      return { posted: true, already: true, slack: "already", linear: "skipped" };
+    }
     const result = await commentIncident(ctx.host, incident, text);
     return { posted: true, ...result };
   },

@@ -1,7 +1,7 @@
 import type { HostKvApi } from "@cursor/bdk";
 import { isRecord, toJson } from "./json.js";
 
-export type SlackMessageRole = "alert" | "triage";
+export type SlackMessageRole = "alert" | "triage" | "ship_review";
 
 export type SlackMessageRef = {
   incidentId: string;
@@ -28,7 +28,7 @@ export async function lookupSlackMessage(
   if (!isRecord(value) || typeof value.incidentId !== "string") {
     return undefined;
   }
-  if (value.role !== "alert" && value.role !== "triage") {
+  if (value.role !== "alert" && value.role !== "triage" && value.role !== "ship_review") {
     return undefined;
   }
   return { incidentId: value.incidentId, role: value.role };
