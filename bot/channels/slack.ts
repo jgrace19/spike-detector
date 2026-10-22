@@ -1,29 +1,47 @@
 import { defaultOnAppMention, slackChannel } from "@cursor/bdk/channels/slack";
-
-/** Reactions on the bot's page that count as sign-off. */
-const SIGNOFF_REACTIONS = new Set(["+1", "thumbsup", "white_check_mark", "heavy_check_mark", "shipit"]);
+import { handleApproveButton, handleSignoffReaction, handleSignoffReply } from "../lib/slack-signoff.js";
 
 /**
  * Socket Mode app for the demo Slack workspace. Tokens come from
- * `bdk slack create`. Mentions and thread replies resume one session per
- * thread. A thumbs-up on the page resumes that thread as a sign-off.
+ * `bdk slack create`. A thumbs-up or approve reply on the triage message
+ * records sign-off in the handler and does not start a model turn, so one
+ * reaction cannot produce two replies. Reactions on the alert are ignored.
+ * Thread replies are watched so "approve" counts without an @mention when
+ * the host delivers them.
  */
 export default slackChannel({
   envPrefix: "SPIKE_DETECTOR",
   suggestedPrompts: [
     {
-      title: "Sign off",
-      message: "signed off incident:<id>",
+      title: "Approve fix",
+      message: "approve",
     },
   ],
+  engagement: {
+    channelPosts: {
+      allow: ["*"],
+      posts: "replies",
+      replies: "joined",
+    },
+  },
+  onAppMention: async (ctx, message) => {
+    if ((await handleSignoffReply(ctx.host, message)) === "handled") {
+      return null;
+    }
+    return defaultOnAppMention(ctx, message);
+  },
+  onChannelPost: async (ctx, message) => {
+    if ((await handleSignoffReply(ctx.host, message)) === "handled") {
+      return null;
+    }
+    return null;
+  },
   onReactionAdded: async (ctx, message) => {
-    const name = message.reaction?.name?.split("::")[0];
-    if (!name || !SIGNOFF_REACTIONS.has(name)) return null;
-    const decision = await defaultOnAppMention(ctx, message);
-    if (!decision) return decision;
-    return {
-      ...decision,
-      message: `signed off (reacted :${name}: on the page). Load the incident:<id> from this thread and record the sign-off.`,
-    };
+    await handleSignoffReaction(ctx.host, message);
+    return null;
+  },
+  onBlockAction: async (ctx, action) => {
+    await handleApproveButton(ctx.host, action);
+    return null;
   },
 });

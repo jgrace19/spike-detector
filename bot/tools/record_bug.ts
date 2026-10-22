@@ -6,7 +6,7 @@ import { armSignoffWatch } from "../lib/watch.js";
 
 export default defineTool({
   description:
-    "Record that the alert is a bug. Call this before launch_triage, open_linear_issue, and page_code_owner. Does not page by itself.",
+    "Record that the alert is a bug. Call this before launch_triage, open_linear_issue, and page_code_owner. Does not post to Slack by itself. page_code_owner posts the alert and does not ask for sign-off.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),

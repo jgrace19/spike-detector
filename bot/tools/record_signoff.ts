@@ -1,12 +1,14 @@
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
-import { INCIDENT_ID_PATTERN, incidentContinuation } from "../lib/demo.js";
-import { getIncident, updateIncident } from "../lib/incidents.js";
+import { incidentContinuation, INCIDENT_ID_PATTERN } from "../lib/demo.js";
+import { getIncident } from "../lib/incidents.js";
+import { isApprovalReply } from "../lib/public-text.js";
 import { signoffWakePrompt } from "../lib/prompts.js";
+import { applySignoff } from "../lib/signoff.js";
 
 export default defineTool({
   description:
-    "Record an explicit human sign-off from the Slack thread. Only a Slack session can call this. Wakes the incident session so it can call request_fix.",
+    "Record an explicit human sign-off from the Slack thread. The Slack handlers do this themselves for a triage-message reaction, Approve button, or approve reply, and they do not start a model turn. Calling this again returns already and does not wake the incident session a second time. Only a Slack session can call this.",
   effect: "write",
   inputSchema: z.object({
     incidentId: z.string().regex(INCIDENT_ID_PATTERN),
@@ -20,38 +22,28 @@ export default defineTool({
     if (ctx.session.channelId !== "slack") {
       return { recorded: false, reason: "slack_session_required" };
     }
-    const incident = await getIncident(ctx.host.kv, incidentId);
-    if (incident === undefined) {
-      return { recorded: false, reason: "unknown_incident" };
+    if (!isApprovalReply(note) && !/^approved with\b/i.test(note)) {
+      return { recorded: false, reason: "not_signoff" };
     }
-    if (incident.status !== "bug") {
-      return { recorded: false, reason: "not_a_bug" };
+    const result = await applySignoff({
+      host: ctx.host,
+      incidentId,
+      note,
+      wake: async (id) => {
+        const incident = await getIncident(ctx.host.kv, id);
+        await ctx.send("observability", signoffWakePrompt(id), {
+          continuationToken: incidentContinuation(id),
+          admission: "coalesce",
+          ...(incident?.principal === undefined ? {} : { auth: incident.principal }),
+        });
+      },
+    });
+    if (result.status === "rejected") {
+      return { recorded: false, reason: result.reason };
     }
-    if (incident.signedOffAt !== undefined && incident.fixRequestedAt !== undefined) {
+    if (result.status === "already") {
       return { recorded: true, already: true };
     }
-    const signedOffAt = incident.signedOffAt ?? new Date().toISOString();
-    const signedOffNote = incident.signedOffNote ?? note;
-    await updateIncident(ctx.host.kv, incidentId, {
-      signedOffAt,
-      signedOffNote,
-      signoffWakeSent: false,
-    });
-    try {
-      await ctx.send("observability", signoffWakePrompt(incidentId), {
-        continuationToken: incidentContinuation(incidentId),
-        admission: "coalesce",
-        ...(incident.principal === undefined ? {} : { auth: incident.principal }),
-      });
-      await updateIncident(ctx.host.kv, incidentId, { signoffWakeSent: true });
-      return { recorded: true, wake: "incident_session" };
-    } catch (error) {
-      return {
-        recorded: true,
-        wake: "reminder",
-        todo: "ctx.send into the incident continuation failed. The signoff_watch reminder is the fallback. Confirm whether tool send() can resume another channel's session as the stored principal.",
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+    return { recorded: true, wake: result.wake === "sent" ? "incident_session" : "reminder" };
   },
 });

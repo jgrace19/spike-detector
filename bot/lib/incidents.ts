@@ -29,7 +29,16 @@ export type IncidentRecord = {
   linearIssueId?: string;
   linearIssueUrl?: string;
   slackChannelId?: string;
+  /** Thread root: the alert message. */
   slackThreadTs?: string;
+  /** Triage result in that thread. Only this message accepts sign-off. */
+  triageSlackTs?: string;
+  /** Scrubbed triage report. `request_fix` uses it as the plan. */
+  triageReport?: string;
+  /** Set when a triage run stopped without a report worth approving. */
+  triageErrorPostedAt?: string;
+  fixProgressPostedAt?: string;
+  prNotifiedAt?: string;
   signedOffAt?: string;
   signedOffNote?: string;
   signoffWakeSent?: boolean;

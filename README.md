@@ -4,10 +4,12 @@ BDK bot that triages marketplace metric anomalies. A mock observability
 app (not in this repo) posts an alert. The bot decides whether the spike
 matches a recent change in
 [jgrace19/marketplace](https://github.com/jgrace19/marketplace).
-Expected changes are logged and not paged. Bugs are investigated by a
-Cursor cloud agent, filed in Linear, and held for a Slack sign-off before
-the fix pull request. A GitHub wake plus a reminder watch `preview-<pr>`
-until GMV and average order value are back within 10% of baseline.
+Expected changes are logged and not posted. Bugs are investigated by a
+Cursor cloud agent and filed in Linear. Slack gets an alert as soon as
+the bug is classified, then the triage result when that agent stops.
+A reaction on the triage message signs off the fix pull request. A
+GitHub wake plus a reminder watch `preview-<pr>` until GMV and average
+order value are back within 10% of baseline.
 
 Defaults chosen for this demo:
 
@@ -17,7 +19,7 @@ Defaults chosen for this demo:
 - Slack env prefix `SPIKE_DETECTOR`
 - Recovery band: 10% of `max(|baseline|, 1)`
 - Explanation band in the skill: 15% of a stated target
-- Linear workspace `fe-demo`. Project defaults to `Marketplace`, overridable with `LINEAR_PROJECT`
+- Linear workspace `fe-demo`. Project defaults to `FreshCart`, overridable with `LINEAR_PROJECT`
 - Linear MCP is `https://mcp.linear.app/mcp` with a fe-demo personal API key (`LINEAR_TOKEN`), not the team's Cursor Linear connector
 - Deploy ready: GitHub CI success on the fix pull request, or the first `preview-<pr>` metric snapshot. No deployment-host URL
 
@@ -36,20 +38,39 @@ Defaults chosen for this demo:
    `demo/base` (or `MARKETPLACE_STARTING_REF`) and must not edit code
    yet. `autoCreatePR` is on so the later fix follow-up opens a pull
    request against that same branch.
-5. `page_code_owner` posts in the configured Slack channel. The incident
-   record in host KV, keyed `incident:<id>`, is how the Slack thread
-   resumes the incident.
-6. `open_linear_issue` files the ticket in workspace `fe-demo`. The
-   project is `LINEAR_PROJECT`, or `Marketplace` when that is unset.
-7. After an explicit Slack sign-off, `record_signoff` wakes the incident
-   session and `request_fix` tells that same cloud agent to open the PR
-   against `demo/base`, or against the starting ref stored at launch.
-8. The preview is ready when GitHub CI on that pull request succeeds, or
-   when the first snapshot is stored for env `preview-<pr>`. The
-   `preview_watch` reminder then polls `query_metrics`.
-9. `close_incident` runs only when both GMV and average order value are
-   within 10% of baseline. It comments on Slack and Linear, closes the
-   ticket, and cancels the reminder.
+5. `open_linear_issue` files the ticket in workspace `fe-demo`. The
+   project is `LINEAR_PROJECT`, or `FreshCart` when that is unset.
+6. `page_code_owner` posts message 1, the alert, in the configured Slack
+   channel. It is a Block Kit warning: severity, metric, value versus
+   baseline, the percent change, env, window, and the Linear and cloud
+   agent links when they exist. It says triage is underway. It does not
+   ask for sign-off and does not @mention anyone. The thread timestamp
+   is stored on `incident:<id>`.
+7. When the triage cloud agent stops, message 2 is posted in that
+   thread with no Slack reply required. A reminder polls the agent
+   every 20 seconds and posts from the handler. The extension's
+   `[cloud agent stopped]` wake does the same post from
+   `bot/hooks/cloud-stop.ts` if it arrives first. The card has the root
+   cause, suspect commit, file and function, impact, fix plan, and
+   confidence. It @mentions `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` and asks
+   for a 👍 on that message. The triage message timestamp is stored on
+   the incident. `post_triage_result` is the same post and is idempotent.
+8. Sign-off is a 👍 or ✅ reaction, the Approve fix button, or a reply
+   of `approve`, `lgtm`, or `ship it` on or under the triage message.
+   Reactions on the alert are ignored. The Slack handler records it
+   once, posts one `🛠️ Fix in progress` line, and wakes the incident
+   session. It does not start a model turn, so one reaction cannot
+   produce two replies. A later reaction only adds 👀.
+9. `request_fix` tells that same cloud agent to open the PR against the
+   ref stored at launch. When that run stops, the hook posts the pull
+   request link and arms the preview watch.
+10. The preview is ready when GitHub CI on that pull request succeeds, or
+    when the first snapshot is stored for env `preview-<pr>`. The
+    `preview_watch` reminder then polls `query_metrics`.
+11. `close_incident` runs only when both GMV and average order value are
+    within 10% of baseline. It posts a resolved Slack message with a
+    checkmark header and before/after numbers, comments on Linear,
+    closes the ticket, and cancels the reminder.
 
 `POST /metrics` stores snapshots in KV and records the first
 `preview-<pr>` arrival. It does not start a turn.
@@ -128,7 +149,9 @@ secrets:
 - `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` — member id `U…`
 
 Until those are set, `page_code_owner` returns
-`slack_channel_unconfigured` and does not post.
+`slack_channel_unconfigured` and does not post. The code owner is
+mentioned on the triage result, not on the alert. An empty owner id
+still posts the triage card, without an @mention.
 
 ### Linear
 
@@ -137,7 +160,7 @@ header `authorization: Bearer ${LINEAR_TOKEN}`. Create `LINEAR_TOKEN` as a
 personal API key in the fe-demo Linear workspace. The team's Cursor Linear
 integration points at a different workspace, so this bot does not use it.
 Issues still go to workspace `fe-demo`. The project name defaults to
-`Marketplace`. Set `LINEAR_PROJECT` to use another project there. The
+`FreshCart`. Set `LINEAR_PROJECT` to use another project there. The
 connection is `optional`, so a missing token omits Linear instead of
 failing the turn. GitHub events stay on the channel's Cursor account.
 
@@ -177,7 +200,7 @@ printf %s "$OBSERVABILITY_SHARED_SECRET" | npx bdk secret set spike-detector OBS
 printf %s "$SPIKE_DETECTOR_SLACK_CHANNEL" | npx bdk secret set spike-detector SPIKE_DETECTOR_SLACK_CHANNEL
 printf %s "$SPIKE_DETECTOR_CODE_OWNER_SLACK_ID" | npx bdk secret set spike-detector SPIKE_DETECTOR_CODE_OWNER_SLACK_ID
 printf %s "demo/base" | npx bdk secret set spike-detector MARKETPLACE_STARTING_REF
-printf %s "Marketplace" | npx bdk secret set spike-detector LINEAR_PROJECT
+printf %s "FreshCart" | npx bdk secret set spike-detector LINEAR_PROJECT
 printf %s "$LINEAR_TOKEN" | npx bdk secret set spike-detector LINEAR_TOKEN
 npx bdk secret list spike-detector
 ```
@@ -196,10 +219,10 @@ Slack go through the host clients and the Cursor backend.
 | `OBSERVABILITY_SHARED_SECRET` | `POST /alert` and `POST /metrics` |
 | `SPIKE_DETECTOR_SLACK_BOT_TOKEN` | Slack Socket Mode, from `slack create` |
 | `SPIKE_DETECTOR_SLACK_APP_TOKEN` | Slack Socket Mode, from `slack create` |
-| `SPIKE_DETECTOR_SLACK_CHANNEL` | Paging the code owner |
-| `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | The `@` mention. Empty posts without a mention |
+| `SPIKE_DETECTOR_SLACK_CHANNEL` | Alert and triage thread |
+| `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | @mention on the triage result only. Empty posts without a mention |
 | `MARKETPLACE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
-| `LINEAR_PROJECT` | Optional. Empty uses project `Marketplace` in workspace `fe-demo` |
+| `LINEAR_PROJECT` | Optional. Empty uses project `FreshCart` in workspace `fe-demo` |
 | `LINEAR_TOKEN` | Linear personal API key created in the fe-demo workspace |
 
 The host also needs a Cursor credential (`bdk login`, `CURSOR_API_KEY`,
@@ -275,11 +298,12 @@ open Linear issues, or launch cloud agents. `list_recent_changes` reads
 | `bot/skills/expected-vs-bug/SKILL.md` | Expected versus bug rubric |
 | `bot/channels/observability.ts` | `POST /alert`, `POST /metrics` |
 | `bot/channels/github.ts` | Pull request and CI wakes for `jgrace19/marketplace` |
-| `bot/channels/slack.ts` | Sign-off thread |
+| `bot/channels/slack.ts` | Triage-message sign-off. No model turn on a reaction |
+| `bot/hooks/cloud-stop.ts` | Posts triage or the pull request when the cloud agent stops |
 | `bot/extensions/cloud/` | Cloud agents on marketplace. Launch and reply are disabled |
 | `bot/mcp-connections/linear.ts` | Linear MCP at `mcp.linear.app` with `LINEAR_TOKEN` |
 | `bot/tools/` | One tool per file |
-| `bot/reminders/` | Sign-off backup wake and preview poll |
+| `bot/reminders/` | Sign-off backup wake, 20s cloud-agent stop poll, preview poll |
 | `evals/` | Expected and bug cases |
 
 ## TODOs

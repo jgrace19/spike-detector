@@ -2,6 +2,8 @@ import { launchCloudAgent } from "@cursor/bdk/extensions/cursor-cloud-agents";
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
 import { INCIDENT_ID_PATTERN, marketplaceRepo } from "../lib/demo.js";
+import { refreshAlertIfPosted } from "../lib/alert-post.js";
+import { armCloudStopWatch } from "../lib/cloud-watch.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { triagePrompt } from "../lib/prompts.js";
 
@@ -63,6 +65,12 @@ export default defineTool({
       cloudAgentId: launched.agentId,
       cloudAgentUrl: launched.url,
       startingRef: repo.startingRef,
+    });
+    await refreshAlertIfPosted(ctx.host, incidentId);
+    await armCloudStopWatch(ctx.host, {
+      incidentId,
+      agentId: launched.agentId,
+      phase: "triage",
     });
     return {
       launched: true,
