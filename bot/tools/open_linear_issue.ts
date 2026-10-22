@@ -1,6 +1,7 @@
 import { defineTool } from "@cursor/bdk/tools";
 import { z } from "zod";
 import { demo, INCIDENT_ID_PATTERN, linearProjectName } from "../lib/demo.js";
+import { refreshAlertIfPosted } from "../lib/alert-post.js";
 import { getIncident, updateIncident } from "../lib/incidents.js";
 import { openLinearIssue } from "../lib/linear.js";
 
@@ -54,6 +55,7 @@ export default defineTool({
       linearIssueId: identifier,
       linearIssueUrl: opened.url,
     });
+    await refreshAlertIfPosted(ctx.host, incidentId);
     return {
       opened: true,
       identifier,

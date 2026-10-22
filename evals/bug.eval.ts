@@ -5,7 +5,8 @@ const incidentId = "bug-checkout-undercharge";
 
 export default defineEval({
   tags: ["smoke", "bug"],
-  description: "A checkout revenue drop with flat order volume is recorded as a bug and paged.",
+  description:
+    "A checkout revenue drop with flat order volume is recorded as a bug and an alert is posted.",
   async test(t) {
     await t.send(
       [

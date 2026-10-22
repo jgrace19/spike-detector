@@ -43,8 +43,11 @@ Any of these is true:
   revenue target the observation is within 15% of.
 
 Call `record_bug`. The note says which of those applied. Then launch
-triage, open the Linear issue, and page the code owner. The cloud agent
-investigates the symptom. Do not tell it a specific edit.
+triage, open the Linear issue, and call `page_code_owner`. That posts
+an alert only: metric, value versus baseline, and that triage is
+underway. It does not ask for sign-off and does not @mention anyone.
+Do not call `request_fix`. The cloud agent investigates the symptom.
+Do not tell it a specific edit.
 
 ## Checkout revenue shape
 

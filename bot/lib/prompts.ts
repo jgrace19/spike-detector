@@ -39,6 +39,20 @@ export function triagePrompt(input: {
     `value: ${input.value}`,
     `window: ${input.window}`,
     "Report the likely cause and a proposed fix a reviewer can accept or reject.",
+    "Write like an on-call engineer. Do not name git branches.",
+    "End your final message with a fenced block in exactly this shape. Use none when you cannot tell.",
+    "```incident-report",
+    "root_cause: one sentence",
+    "commit_sha: hex sha, or none",
+    "commit_message: subject line, or none",
+    "file: repo path, or none",
+    "function: function name, or none",
+    "impact: who is affected, one sentence",
+    "confidence: high, medium, or low",
+    "plan:",
+    "- one concrete step",
+    "- another step",
+    "```",
     "If you write any text the user will see, include the incident id as incident:" +
       input.incidentId +
       ".",
@@ -65,6 +79,7 @@ export function fixPrompt(input: {
     `The pull request base branch is ${input.baseBranch}.`,
     `Put this exact token in the pull request body: incident:${input.incidentId}`,
     "Do not merge the pull request.",
+    "Write the pull request as production incident response.",
     `Sign-off note: ${input.signoffNote}`,
   ];
   if (input.plan !== undefined && input.plan.trim() !== "") {
@@ -82,6 +97,9 @@ export function signoffWakePrompt(incidentId: string): string {
   return [
     `Code owner signed off incident:${incidentId}.`,
     "Call load_incident, then request_fix.",
+    "The fix plan is already on the incident record.",
     "Do not launch a second cloud agent. request_fix continues the one already launched.",
+    "Do not post to Slack. The thread already says the fix is in progress.",
+    "If request_fix returns already, stop.",
   ].join("\n");
 }

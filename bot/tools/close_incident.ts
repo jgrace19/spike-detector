@@ -6,6 +6,7 @@ import { getIncident, updateIncident } from "../lib/incidents.js";
 import { closeLinearIssue } from "../lib/linear.js";
 import { checkValidationMetrics } from "../lib/metrics.js";
 import { commentIncident } from "../lib/notify.js";
+import { resolvedPayload } from "../lib/slack-cards.js";
 
 export default defineTool({
   description:
@@ -43,13 +44,13 @@ export default defineTool({
         metrics: validation.metrics,
       };
     }
-    const lines = validation.metrics.map(
-      (metric) => `${metric.metric}: value ${metric.value}, baseline ${metric.baseline}`,
-    );
-    const text = [`incident:${incidentId} recovered on ${env} (${ready.reason}).`, ...lines, note].join(
-      "\n",
-    );
-    const comments = await commentIncident(ctx.host, incident, text);
+    const payload = resolvedPayload({
+      incident,
+      env,
+      metrics: validation.metrics,
+      note,
+    });
+    const comments = await commentIncident(ctx.host, incident, payload.text, payload.blocks);
     let linear = "skipped";
     if (incident.linearIssueId !== undefined) {
       const closed = await closeLinearIssue(ctx.host.mcp, { identifier: incident.linearIssueId });
