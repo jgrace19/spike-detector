@@ -78,8 +78,9 @@ export function fixPrompt(input: {
     "The code owner signed off. Implement the approved fix and open a pull request.",
     `The pull request base branch is ${input.baseBranch}.`,
     `Put this exact token in the pull request body: incident:${input.incidentId}`,
-    "Do not merge the pull request.",
+    "Do not merge the pull request. Do not add a ship label.",
     "Write the pull request as production incident response.",
+    "In the title, body, and comments, call the base branch production. Do not write the branch name.",
     `Sign-off note: ${input.signoffNote}`,
   ];
   if (input.plan !== undefined && input.plan.trim() !== "") {

@@ -7,6 +7,7 @@ import { prNumberFromUrl, scrubPublicText, stringField } from "./public-text.js"
 import { serialize } from "./serialize.js";
 import { pullRequestPayload, triageErrorPayload, triagePayload } from "./slack-cards.js";
 import { codeOwnerSlackId } from "./demo.js";
+import { postShipReview } from "./ship.js";
 import { parseTriageReport, reportAsPlan, reportHasFindings } from "./triage-report.js";
 import { armPreviewWatch } from "./watch.js";
 
@@ -150,40 +151,63 @@ async function announceFix(
   if (prUrl === undefined) {
     return { posted: false, reason: "no_pull_request" };
   }
-  if (incident.prNotifiedAt !== undefined) {
-    return { posted: true, already: true, kind: "pull_request", url: incident.prUrl ?? prUrl };
-  }
   const current = await ensureThread(host, incident);
   if (current.slackThreadTs === undefined) {
     return { posted: false, reason: "no_slack_thread" };
   }
-  const prNumber = prNumberFromUrl(prUrl);
-  const payload = pullRequestPayload(prUrl, prNumber);
-  const posted = await postSlack({
-    host,
-    incident: current,
-    text: payload.text,
-    blocks: payload.blocks,
-    thread: true,
-  });
-  if (!posted.posted) {
-    return posted;
+  const prNumber = prNumberFromUrl(prUrl) ?? current.prNumber;
+  const alreadyAnnounced = current.prNotifiedAt !== undefined;
+  const alreadyReviewed = current.shipReviewSlackTs !== undefined;
+  if (alreadyAnnounced && alreadyReviewed) {
+    return { posted: true, already: true, kind: "pull_request", url: current.prUrl ?? prUrl };
   }
-  await updateIncident(host.kv, current.incidentId, {
-    prUrl,
-    prNotifiedAt: new Date().toISOString(),
-    ...(prNumber === undefined ? {} : { prNumber }),
-  });
   let watch: string | undefined;
-  if (prNumber !== undefined) {
-    const armed = await armPreviewWatch(host, {
-      incidentId: current.incidentId,
-      prNumber,
-      metric: current.metric,
+  let ts: string | undefined;
+  if (!alreadyAnnounced) {
+    const payload = pullRequestPayload(prUrl, prNumber);
+    const posted = await postSlack({
+      host,
+      incident: current,
+      text: payload.text,
+      blocks: payload.blocks,
+      thread: true,
     });
-    watch = armed.armed ? armed.reminderId : armed.reason;
+    if (!posted.posted) {
+      return posted;
+    }
+    ts = posted.ts;
+    await updateIncident(host.kv, current.incidentId, {
+      prUrl,
+      prNotifiedAt: new Date().toISOString(),
+      ...(prNumber === undefined ? {} : { prNumber }),
+    });
+    if (prNumber !== undefined) {
+      const armed = await armPreviewWatch(host, {
+        incidentId: current.incidentId,
+        prNumber,
+        metric: current.metric,
+      });
+      watch = armed.armed ? armed.reminderId : armed.reason;
+    }
   }
-  return { posted: true, kind: "pull_request", url: prUrl, prNumber, watch, ts: posted.ts };
+  const refreshed = (await getIncident(host.kv, current.incidentId)) ?? current;
+  if (refreshed.shipReviewSlackTs === undefined) {
+    const review = await postShipReview(host, { ...refreshed, prUrl }, prUrl, prNumber);
+    if (review.posted) {
+      ts = review.ts ?? ts;
+    } else {
+      console.warn(`[spike-detector] ship review post failed: ${review.reason ?? "unknown"}`);
+    }
+  }
+  return {
+    posted: true,
+    kind: "pull_request",
+    url: prUrl,
+    prNumber,
+    watch,
+    ts,
+    ...(alreadyAnnounced && alreadyReviewed ? { already: true } : {}),
+  };
 }
 
 async function ensureThread(host: HostContext, incident: IncidentRecord): Promise<IncidentRecord> {

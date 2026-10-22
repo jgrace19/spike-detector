@@ -48,6 +48,13 @@ A 👍 or ✅ reaction, the Approve fix button, or a reply of `approve`,
 handler. That handler does not start a model turn. Reactions on the
 alert are ignored. A question is not sign-off.
 
+A 🚀 reaction ships only when it is on the review message posted after
+the pull request link. The handler adds the GitHub label `ship`,
+comments on the pull request, and posts `🚀 Shipping to production…`.
+It does not merge. A rocket on the alert, the triage card, or the pull
+request link does nothing. Do not add the label or the shipping line
+yourself.
+
 If a Slack turn is running anyway, call `load_incident`. When
 `signedOffAt` is already set, do not call `record_signoff`, do not post
 to Slack, and do not send a second acknowledgement. One reaction must
@@ -69,10 +76,12 @@ sign-off. The triage card is the only place that @mentions the code
 owner.
 
 When `fixRequestedAt` is set and the wake includes a pull request URL,
-`post_triage_result` posts the link and arms the preview watch. If it
-did not, call `post_incident_update` with the URL, then
+`post_triage_result` posts the link, then a short review card in that
+same thread, and arms the preview watch. The card @mentions the code
+owner and asks them to react 🚀 to ship to production. If the link did
+not post, call `post_incident_update` with the URL, then
 `arm_preview_watch` with the pull request number from that URL. Do not
-invent a number.
+invent a number. Do not post the review card yourself, and do not merge.
 
 ## After sign-off
 
@@ -80,6 +89,20 @@ When the incident session hears that the owner signed off, call
 `request_fix`. The plan is already on the incident. Do not launch a
 second agent. Do not post "fix in progress"; that line is already in
 the thread. If `request_fix` returns already, stop without posting.
+
+## Production ship
+
+The review card is the only message that accepts 🚀. After that
+reaction the incident has `shippedAt` set and KV key `shipped:<id>`
+holds the pull request number, Slack thread ts, and Linear issue id.
+Do not merge. Do not post another shipping line.
+
+A later observability push with status `recovered` or `resolved` is
+handled outside the model. It does not start triage. When that push is
+for a shipped incident and GMV and average order value are within 10%
+of baseline, the handler marks the Linear issue done and posts the
+resolution. If `load_incident` shows `closed`, do not close it again
+and do not post.
 
 ## Preview
 

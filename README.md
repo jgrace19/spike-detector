@@ -7,9 +7,12 @@ matches a recent change in
 Expected changes are logged and not posted. Bugs are investigated by a
 Cursor cloud agent and filed in Linear. Slack gets an alert as soon as
 the bug is classified, then the triage result when that agent stops.
-A reaction on the triage message signs off the fix pull request. A
-GitHub wake plus a reminder watch `preview-<pr>` until GMV and average
-order value are back within 10% of baseline.
+A reaction on the triage message signs off the fix pull request. When
+the pull request link is posted, a review card asks for a 🚀 reaction.
+That reaction adds the GitHub label `ship` and does not merge. A
+recovery push then closes the incident when GMV and average order value
+are back within 10% of baseline. A GitHub wake plus a reminder still
+watch `preview-<pr>` the same way.
 
 Defaults chosen for this demo:
 
@@ -62,18 +65,90 @@ Defaults chosen for this demo:
    session. It does not start a model turn, so one reaction cannot
    produce two replies. A later reaction only adds 👀.
 9. `request_fix` tells that same cloud agent to open the PR against the
-   ref stored at launch. When that run stops, the hook posts the pull
-   request link and arms the preview watch.
-10. The preview is ready when GitHub CI on that pull request succeeds, or
+   ref stored at launch. The pull request is production incident
+   response. The agent must not merge it, must not add a `ship` label,
+   and must not write the branch name in the title or body.
+10. When that run stops, the hook posts the pull request link in the
+    thread, then a short Block Kit review card in the same thread. The
+    card @mentions `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID`, links the pull
+    request, includes a one-line summary, and says `Fix is ready for
+    review · React 🚀 to ship to production`. The review message ts is
+    stored on the incident as `shipReviewSlackTs` and indexed at
+    `slack-ts:<ts>` with role `ship_review`. The preview watch is armed
+    at the same time.
+11. A 🚀 reaction (Slack name `rocket`) on that review message only adds
+    the GitHub label `ship` (creating the label when it is missing) and
+    comments `Approved for production by @<user> via Slack`. It does not
+    merge. The thread then gets `🚀 Shipping to production…`. A second
+    rocket does not comment or post again. Rockets on the alert, the
+    triage card, or the pull request link are ignored. The handler
+    writes KV key `shipped:<incidentId>` with the pull request number,
+    Slack thread ts, and Linear issue id.
+12. The preview is ready when GitHub CI on that pull request succeeds, or
     when the first snapshot is stored for env `preview-<pr>`. The
     `preview_watch` reminder then polls `query_metrics`.
-11. `close_incident` runs only when both GMV and average order value are
-    within 10% of baseline. It posts a resolved Slack message with a
-    checkmark header and before/after numbers, comments on Linear,
-    closes the ticket, and cancels the reminder.
+13. `close_incident` still runs for the preview env when both GMV and
+    average order value are within 10% of baseline. Production close-out
+    is separate: a recovery push to `POST /alert` (below). That push
+    does not start triage.
 
 `POST /metrics` stores snapshots in KV and records the first
 `preview-<pr>` arrival. It does not start a turn.
+
+### Production recovery
+
+The observability platform posts recovery to the same `POST /alert`
+route as an anomaly. The body is the anomaly payload plus `status` and
+current-versus-baseline GMV and AOV. `status` of `recovered` or
+`resolved` (any case) is recovery. Any other status, including a missing
+status, starts triage as before.
+
+`env` must be `prod` for the live storefront. `production` and
+`demo/base` are accepted as that same environment and are never written
+into Slack or Linear. A `preview-<pr>` env does not close the incident
+and does not start triage.
+
+Numbers are JSON numbers, not strings. `value` is the current reading.
+`current` is an alias of `value`. `previous` is optional and is the
+anomaly reading shown as "before" in Slack. When `previous` is omitted,
+the incident's stored alert value is used for the metric that opened it.
+
+Both checkout metrics must be present and within 10% of baseline
+(`|value - baseline| / max(|baseline|, 1) <= 0.1`). The incident must
+already have a `shipped:<incidentId>` record. Then the handler marks the
+Linear issue Done (the team's completed workflow state, via the existing
+Linear client), posts a checkmark resolution in the Slack thread with
+before/after GMV and AOV, the pull request, and the Linear ticket, and
+sets the incident to `closed`. A second recovery push does not post
+again. If the metrics are still outside 10%, or the fix has not shipped,
+the handler returns without posting and without starting triage.
+
+```json
+{
+  "incidentId": "inc-1001",
+  "metric": "freshcart.checkout.gmv_cents",
+  "env": "prod",
+  "baseline": 100000,
+  "value": 98000,
+  "window": "30m",
+  "status": "recovered",
+  "gmv": { "value": 98000, "baseline": 100000, "previous": 68000 },
+  "aov": { "value": 4400, "baseline": 4500, "previous": 3100 }
+}
+```
+
+`status` may be `resolved` instead of `recovered`. `previous` may be
+omitted. `gmv.current` / `aov.current` may be sent instead of `value`.
+
+KV written at ship time:
+
+| Key | Value |
+| --- | --- |
+| `shipped:<incidentId>` | `prNumber`, `prUrl`, `threadTs`, `channelId`, `linearIssueId`, `linearIssueUrl`, `reviewTs`, `shippedAt`, `approver` |
+| `incident:<incidentId>` | Existing incident, plus `shipReviewSlackTs`, `shippedAt`, `shippingPostedAt`, `resolutionPostedAt` |
+| `slack-ts:<review ts>` | `{ incidentId, role: "ship_review" }` |
+
+Recovery looks up `shipped:<incidentId>` from the body's `incidentId`.
 
 ## Auth
 
@@ -150,8 +225,22 @@ secrets:
 
 Until those are set, `page_code_owner` returns
 `slack_channel_unconfigured` and does not post. The code owner is
-mentioned on the triage result, not on the alert. An empty owner id
-still posts the triage card, without an @mention.
+mentioned on the triage result and on the ship-review card, not on the
+alert. An empty owner id still posts those cards, without an @mention.
+
+The 👍 reaction and the 🚀 reaction both use the `reaction_added` event
+subscription and the `reactions:read` bot scope. `bdk slack create`
+already requests those for the thumbs-up flow. No new event and no
+custom emoji are required: the standard emoji name is `rocket`. If
+reactions never arrive, reinstall the Slack app so `reaction_added` and
+`reactions:read` are on the token.
+
+`users:read` is optional. With it, the GitHub comment uses the reactor's
+display name (`Approved for production by @Ada via Slack`). Without it,
+the comment uses the Slack member id (`@U…`). The app also needs
+`chat:write`, which the existing bot token already has, and permission
+on the GitHub account to create a label and comment on pull requests in
+`jgrace19/marketplace`. The bot does not merge.
 
 ### Linear
 
@@ -220,7 +309,7 @@ Slack go through the host clients and the Cursor backend.
 | `SPIKE_DETECTOR_SLACK_BOT_TOKEN` | Slack Socket Mode, from `slack create` |
 | `SPIKE_DETECTOR_SLACK_APP_TOKEN` | Slack Socket Mode, from `slack create` |
 | `SPIKE_DETECTOR_SLACK_CHANNEL` | Alert and triage thread |
-| `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | @mention on the triage result only. Empty posts without a mention |
+| `SPIKE_DETECTOR_CODE_OWNER_SLACK_ID` | @mention on the triage result and the ship-review card. Empty posts without a mention |
 | `MARKETPLACE_STARTING_REF` | Optional. Empty uses `demo/base` for the cloud agent and the fix PR base |
 | `LINEAR_PROJECT` | Optional. Empty uses project `FreshCart` in workspace `fe-demo` |
 | `LINEAR_TOKEN` | Linear personal API key created in the fe-demo workspace |
@@ -250,6 +339,17 @@ curl -sS -D - -X POST http://127.0.0.1:3000/v1/channels/observability/metrics \
 
 A second alert with the same `incidentId` returns `202` and does not
 start another turn.
+
+Recovery uses the same route and does not start a turn. `status` must
+be `recovered` or `resolved`, and both metric objects must be within
+10% of baseline. This example is the body the handler expects:
+
+```bash
+curl -sS -D - -X POST http://127.0.0.1:3000/v1/channels/observability/alert \
+  -H "X-Observability-Token: $OBSERVABILITY_SHARED_SECRET" \
+  -H 'content-type: application/json' \
+  -d '{"incidentId":"inc-1001","metric":"freshcart.checkout.gmv_cents","env":"prod","baseline":100000,"value":98000,"window":"30m","status":"recovered","gmv":{"value":98000,"baseline":100000,"previous":68000},"aov":{"value":4400,"baseline":4500,"previous":3100}}'
+```
 
 Hosted, prefix the alias token when the deployment requires it:
 
@@ -296,9 +396,9 @@ open Linear issues, or launch cloud agents. `list_recent_changes` reads
 | --- | --- |
 | `bot/instructions.md` | Tool order and reply shape |
 | `bot/skills/expected-vs-bug/SKILL.md` | Expected versus bug rubric |
-| `bot/channels/observability.ts` | `POST /alert`, `POST /metrics` |
+| `bot/channels/observability.ts` | `POST /alert` (anomaly or recovery), `POST /metrics` |
 | `bot/channels/github.ts` | Pull request and CI wakes for `jgrace19/marketplace` |
-| `bot/channels/slack.ts` | Triage-message sign-off. No model turn on a reaction |
+| `bot/channels/slack.ts` | Triage sign-off and rocket-to-ship. No model turn on a reaction |
 | `bot/hooks/cloud-stop.ts` | Posts triage or the pull request when the cloud agent stops |
 | `bot/extensions/cloud/` | Cloud agents on marketplace. Launch and reply are disabled |
 | `bot/mcp-connections/linear.ts` | Linear MCP at `mcp.linear.app` with `LINEAR_TOKEN` |

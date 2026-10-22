@@ -106,4 +106,8 @@ test("severity and plan scrub", () => {
     parseTriageReport("root_cause: only on a demo branch\nreal cause is the pricing function"),
   );
   assert.doesNotMatch(plan, /demo branch/);
+  const scrubbed = reportAsPlan(
+    parseTriageReport("root_cause: datacat flagged demo/base\nreal cause is the pricing function"),
+  );
+  assert.doesNotMatch(scrubbed, /datacat|demo\/base/i);
 });

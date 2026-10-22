@@ -5,17 +5,13 @@ import { demo, INCIDENT_ID_PATTERN, incidentContinuation, prNumberFromPreviewEnv
 import { getIncident, principalFromAuth, putIncident } from "../lib/incidents.js";
 import { appendSnapshot } from "../lib/metrics.js";
 import { formatAlertPrompt } from "../lib/prompts.js";
+import {
+  handleProductionRecovery,
+  observabilityAlertDecision,
+  observabilityAlertSchema,
+} from "../lib/recovery.js";
 
 const incidentId = z.string().regex(INCIDENT_ID_PATTERN);
-
-const alertBody = z.object({
-  incidentId,
-  metric: z.string().min(1),
-  env: z.string().min(1),
-  baseline: z.number(),
-  value: z.number(),
-  window: z.string().min(1),
-});
 
 const metricsBody = z.object({
   metric: z.string().min(1),
@@ -44,16 +40,32 @@ export default defineChannel({
   ],
   routes: [
     POST("/alert", {
-      description: "Start or resume anomaly triage for one incidentId.",
-      bodySchema: alertBody,
+      description:
+        "Start or resume anomaly triage for one incidentId. A body with status recovered or resolved closes a shipped incident and does not start triage.",
+      bodySchema: observabilityAlertSchema,
       handler: async (_request, route) => {
         const body = route.body;
+        if (observabilityAlertDecision(body.status) === "recovery") {
+          route.waitUntil(
+            handleProductionRecovery(route.host, body).catch((error: unknown) => {
+              console.warn(
+                `[spike-detector] production recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }),
+          );
+          return new Response(null, { status: 202 });
+        }
         const existing = await getIncident(route.host.kv, body.incidentId);
         if (existing?.sessionStarted === true) {
           return new Response(null, { status: 202 });
         }
         await putIncident(route.host.kv, {
-          ...body,
+          incidentId: body.incidentId,
+          metric: body.metric,
+          env: body.env,
+          baseline: body.baseline,
+          value: body.value,
+          window: body.window,
           status: "received",
           sessionStarted: true,
           updatedAt: new Date().toISOString(),

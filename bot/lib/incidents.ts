@@ -49,6 +49,14 @@ export type IncidentRecord = {
   previewReminderId?: string;
   /** Set when a GitHub check suite or check run for the fix PR succeeds. */
   ciSucceededAt?: string;
+  /** Review card that accepts a rocket reaction. Only this message ships. */
+  shipReviewSlackTs?: string;
+  /** Set after the rocket reaction labels the pull request. */
+  shippedAt?: string;
+  /** Set after "Shipping to production…" is posted. */
+  shippingPostedAt?: string;
+  /** Set after the production resolution is posted. */
+  resolutionPostedAt?: string;
 };
 
 export function incidentKey(incidentId: string): string {
